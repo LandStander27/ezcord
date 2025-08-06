@@ -1,11 +1,11 @@
 use serde::Deserialize;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct Command {
 	pub name: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct Config {
 	pub token: String,
 	pub command: Option<Vec<Command>>,

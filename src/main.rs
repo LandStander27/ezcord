@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::{Context as AnyhowContext, Result, anyhow};
 use clap::Parser;
 use tokio::signal::unix::{SignalKind, signal};
-use tracing::Level;
+use tracing_subscriber::field::MakeExt;
 
 use serenity::all::{Ready, ShardManager};
 use serenity::async_trait;
@@ -15,6 +15,9 @@ use tracing::{debug, error, info, trace, warn};
 
 mod config;
 use config::*;
+
+mod actions;
+mod parser;
 
 #[derive(Parser, Debug)]
 #[command(name = "ezcord", version = version::version)]
@@ -65,6 +68,7 @@ async fn main() -> Result<()> {
 		.with_line_number(args.verbose)
 		.with_thread_ids(args.verbose)
 		.with_target(args.verbose)
+		.map_fmt_fields(|f| f.debug_alt())
 		.with_env_filter(filter)
 		.finish();
 	tracing::subscriber::set_global_default(subscriber)?;
@@ -72,6 +76,8 @@ async fn main() -> Result<()> {
 	trace!("registered logger");
 
 	let config = load_config(&args.bot)?;
+	trace!(loaded_config = ?config);
+
 	let mut client = Client::builder(config.token, GatewayIntents::all())
 		.event_handler(Handler)
 		.await?;
