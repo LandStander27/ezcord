@@ -28,6 +28,7 @@ pub struct Command {
 	pub action: String,
 	pub desc: String,
 	pub args: Option<Vec<Argument>>,
+	pub log: Option<bool>,
 }
 
 #[derive(Deserialize, Debug)]

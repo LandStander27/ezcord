@@ -1,5 +1,4 @@
 use anyhow::anyhow;
-use tracing::info;
 
 use crate::actions::Function;
 use crate::parser::expr::*;
@@ -34,7 +33,7 @@ impl<'a> Sema<'a> {
 			}
 		}
 
-		return Err(anyhow!("unknown function"));
+		return Err(anyhow!("invalid function"));
 	}
 
 	fn resolve_call(&self, call: Call) -> anyhow::Result<ResolvedCall> {
@@ -74,16 +73,17 @@ impl<'a> Sema<'a> {
 	}
 
 	pub fn resolve(&self, input: Vec<Stmt>) -> anyhow::Result<Vec<ResolvedStmt>> {
-		let start = std::time::Instant::now();
 		let mut resolved_stmts = Vec::new();
 
 		for stmt in input {
 			match stmt {
 				Stmt::Expr(expr) => resolved_stmts.push(ResolvedStmt::Expr(self.resolve_expr(expr)?)),
 			}
+
+			#[cfg(feature = "parse_debug")]
+			dbg!(resolved_stmts.last().unwrap());
 		}
 
-		info!("resolving done; took {}ms", start.elapsed().as_millis());
 		return Ok(resolved_stmts);
 	}
 }

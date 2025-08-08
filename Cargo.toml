@@ -3,6 +3,9 @@ name = "ezcord"
 version = "0.0.0"
 edition = "2024"
 
+[features]
+parse_debug = []
+
 [dependencies]
 anyhow = "1.0.98"
 clap = { version = "4.5.43", features = ["derive"] }

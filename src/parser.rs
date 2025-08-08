@@ -11,7 +11,7 @@ use nom::{
 use nom_language::error::{VerboseError, VerboseErrorKind};
 
 use anyhow::anyhow;
-use tracing::{error, info};
+use tracing::error;
 
 mod error;
 mod strings;
@@ -94,8 +94,6 @@ pub(crate) fn parse(input: String) -> anyhow::Result<Vec<Stmt>> {
 		return Ok(Vec::new());
 	}
 
-	let start = std::time::Instant::now();
-
 	let mut rest: &str = input.as_str();
 	let mut actions: Vec<Stmt> = Vec::new();
 
@@ -116,7 +114,7 @@ pub(crate) fn parse(input: String) -> anyhow::Result<Vec<Stmt>> {
 
 		rest = res.0;
 
-		#[cfg(debug_assertions)]
+		#[cfg(feature = "parse_debug")]
 		dbg!(&res.1);
 
 		match res.1 {
@@ -134,6 +132,5 @@ pub(crate) fn parse(input: String) -> anyhow::Result<Vec<Stmt>> {
 		}
 	}
 
-	info!("parsing done; took {}ms", start.elapsed().as_millis());
 	return Ok(actions);
 }

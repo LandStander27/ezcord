@@ -1,13 +1,13 @@
 use super::Type;
-use ezcord_derive::DynamicEnum;
+// use ezcord_derive::DynamicEnum;
 
-#[derive(DynamicEnum, Debug, Clone)]
+// #[derive(DynamicEnum, Debug, Clone)]
 // #[call(fn get_name(&self) -> &str)]
 // #[call(fn get_type(&self) -> &Type)]
-pub enum ResolvedDecl {
-	Param(ResolvedParamDecl),
-	Var(ResolvedVarDecl),
-}
+// pub enum ResolvedDecl {
+// 	Param(ResolvedParamDecl),
+// 	Var(ResolvedVarDecl),
+// }
 
 #[derive(Debug, Clone)]
 pub struct ResolvedParamDecl {

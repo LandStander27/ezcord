@@ -42,6 +42,11 @@ macro_rules! one_or_other {
 	($cond:expr, $yes:expr, $no:expr) => {{ if $cond { $yes } else { $no } }};
 }
 
+pub struct ResolvedCommand {
+	statements: Vec<ResolvedStmt>,
+	log: bool,
+}
+
 pub struct ShardManagerContainer;
 impl TypeMapKey for ShardManagerContainer {
 	type Value = Arc<ShardManager>;
@@ -54,7 +59,7 @@ impl TypeMapKey for ConfigContainer {
 
 pub struct CommandsContainer;
 impl TypeMapKey for CommandsContainer {
-	type Value = Arc<RwLock<HashMap<String, Vec<ResolvedStmt>>>>;
+	type Value = Arc<RwLock<HashMap<String, ResolvedCommand>>>;
 }
 
 pub struct BuiltinFuncsContainer;
@@ -87,7 +92,14 @@ impl EventHandler for Handler {
 				.await;
 
 			let runner = RunnerContext::new(resolved_vars);
-			for stmt in &commands[&command.data.name] {
+
+			let mut start = None;
+			if commands[&command.data.name].log {
+				info!("'{}' command running", command.data.name);
+				start = Some(std::time::Instant::now());
+			}
+
+			for stmt in &commands[&command.data.name].statements {
 				if let ResolvedStmt::Expr(ResolvedExpr::Call(func)) = stmt {
 					for builtin in funcs.iter() {
 						if builtin.name() == func.name.as_str() {
@@ -102,9 +114,15 @@ impl EventHandler for Handler {
 									error!(?why);
 								}
 							}
+
+							break;
 						}
 					}
 				}
+			}
+
+			if let Some(time) = start {
+				info!("'{}' command finished in {}ms", command.data.name, time.elapsed().as_millis());
 			}
 		}
 	}
@@ -121,7 +139,12 @@ impl EventHandler for Handler {
 			let mut parsed_commands = data.get::<CommandsContainer>().unwrap().write().await;
 
 			for cmd in config.command.as_ref().unwrap_or(&vec![]).iter() {
+				debug!("creating '{}' command", cmd.name);
+
+				let start = std::time::Instant::now();
 				let actions = parser::parse(cmd.action.clone()).unwrap();
+				trace!("parsing took {}ms", start.elapsed().as_millis());
+
 				let resolved_args = cmd
 					.args
 					.as_ref()
@@ -130,13 +153,22 @@ impl EventHandler for Handler {
 					.map(|a| ResolvedVarDecl { name: a.name.clone(), typ: a.typ })
 					.collect();
 
+				let start = std::time::Instant::now();
 				let sema = sema::Sema::new(&builtin_functions, resolved_args);
 				let resolved = sema.resolve(actions).unwrap();
-				parsed_commands.insert(cmd.name.clone(), resolved);
+				trace!("resolving took {}ms", start.elapsed().as_millis());
+
+				parsed_commands.insert(
+					cmd.name.clone(),
+					ResolvedCommand {
+						statements: resolved,
+						log: cmd.log.unwrap_or_default(),
+					},
+				);
 
 				let mut slash_command = CreateCommand::new(&cmd.name).description(&cmd.desc);
 				for arg in cmd.args.as_ref().unwrap_or(&vec![]).iter() {
-					slash_command = slash_command.add_option(CreateCommandOption::new(arg.typ.into(), arg.name.clone(), arg.desc.clone()));
+					slash_command = slash_command.add_option(CreateCommandOption::new(arg.typ.into(), arg.name.clone(), arg.desc.clone()).required(!arg.optional.unwrap_or_default()));
 				}
 				commands.push(slash_command);
 			}
