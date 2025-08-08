@@ -529,6 +529,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",
+ "ezcord_derive",
  "nom",
  "nom-language",
  "serde",
@@ -538,6 +539,14 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "version",
+]
+
+[[package]]
+name = "ezcord_derive"
+version = "0.0.0"
+dependencies = [
+ "quote",
+ "syn 2.0.104",
 ]
 
 [[package]]

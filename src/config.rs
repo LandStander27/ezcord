@@ -1,8 +1,33 @@
+use crate::sema::types::Type as ArgType;
 use serde::Deserialize;
+use serenity::model::application::CommandOptionType;
+
+impl From<ArgType> for CommandOptionType {
+	fn from(val: ArgType) -> CommandOptionType {
+		return match val {
+			ArgType::Number => CommandOptionType::Integer,
+			ArgType::String => CommandOptionType::String,
+			ArgType::Void => panic!("argument type cannot be 'void'"),
+		};
+	}
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Argument {
+	pub name: String,
+	pub desc: String,
+	pub optional: Option<bool>,
+
+	#[serde(rename(deserialize = "type"))]
+	pub typ: ArgType,
+}
 
 #[derive(Deserialize, Debug)]
 pub struct Command {
 	pub name: String,
+	pub action: String,
+	pub desc: String,
+	pub args: Option<Vec<Argument>>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -14,9 +39,4 @@ pub struct Config {
 pub fn load_config(s: &str) -> anyhow::Result<Config> {
 	let config = toml::from_str(&std::fs::read_to_string(s)?)?;
 	return Ok(config);
-	// let token = config
-	// 	.get("token")
-	// 	.context("'token' must be specified")?
-	// 	.as_str()
-	// 	.context("'token' must be a string")?;
 }

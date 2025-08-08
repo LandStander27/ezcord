@@ -21,6 +21,7 @@ nom = "8.0.0"
 nom-language = "0.1.0"
 
 version = { path = "version" }
+ezcord_derive = { path = "ezcord-derive" }
 
 [lints.clippy]
 needless_return = "allow"
