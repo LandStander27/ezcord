@@ -22,6 +22,7 @@ serenity = "0.12.4"
 serde = "1.0.219"
 nom = "8.0.0"
 nom-language = "0.1.0"
+chrono = "0.4.41"
 
 version = { path = "version" }
 ezcord_derive = { path = "ezcord-derive" }

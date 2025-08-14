@@ -48,11 +48,11 @@ impl ResolvedVarExpr {
 pub struct ResolvedCall {
 	pub name: String,
 	pub args: Vec<ResolvedExpr>,
-	// pub ret_type: Type,
+	pub ret_type: Type,
 }
 
 impl ResolvedCall {
 	fn get_type(&self) -> Type {
-		return Type::Void;
+		return self.ret_type;
 	}
 }

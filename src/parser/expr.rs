@@ -3,6 +3,7 @@
 #[derive(Debug)]
 pub enum Expr {
 	String(String),
+	FmtString(FmtString),
 	Number(i64),
 	Ident(String),
 	Call(Call),
@@ -12,4 +13,9 @@ pub enum Expr {
 pub struct Call {
 	pub name: String,
 	pub args: Vec<Expr>,
+}
+
+#[derive(Debug)]
+pub struct FmtString {
+	pub segments: Vec<Expr>,
 }

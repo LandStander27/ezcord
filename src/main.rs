@@ -91,7 +91,7 @@ impl EventHandler for Handler {
 				.read()
 				.await;
 
-			let runner = RunnerContext::new(resolved_vars);
+			let mut runner = RunnerContext::new(resolved_vars, &funcs, &command, &ctx, shard_manager.clone());
 
 			let mut start = None;
 			if commands[&command.data.name].log {
@@ -100,24 +100,15 @@ impl EventHandler for Handler {
 			}
 
 			for stmt in &commands[&command.data.name].statements {
-				if let ResolvedStmt::Expr(ResolvedExpr::Call(func)) = stmt {
-					for builtin in funcs.iter() {
-						if builtin.name() == func.name.as_str() {
-							if let Err(e) = runner
-								.run(builtin, &func.args, &command, &ctx, shard_manager)
-								.await
-							{
-								error!("{e}");
-								let data = CreateInteractionResponseMessage::new().content(format!("Error in command: {e}"));
-								let builder = CreateInteractionResponse::Message(data);
-								if let Err(why) = command.create_response(&ctx.http, builder).await {
-									error!(?why);
-								}
-							}
-
-							break;
-						}
+				if let Err(e) = runner.execute_stmt(stmt).await {
+					error!("{e}");
+					let data = CreateInteractionResponseMessage::new().content(format!("Error in command: {e}"));
+					let builder = CreateInteractionResponse::Message(data);
+					if let Err(why) = command.create_response(&ctx.http, builder).await {
+						error!(?why);
 					}
+
+					break;
 				}
 			}
 
@@ -130,7 +121,12 @@ impl EventHandler for Handler {
 	async fn ready(&self, ctx: Context, ready: Ready) {
 		info!("{} is connected!", ready.user.name);
 
-		let mut builtin_functions = vec![Function::Delay(Delay::default()), Function::Respond(Respond::default()), Function::Exit(Exit::default())];
+		let mut builtin_functions = vec![
+			Function::Delay(Delay::default()),
+			Function::Respond(Respond::default()),
+			Function::Exit(Exit::default()),
+			Function::Time(Time::default()),
+		];
 		debug!("registering slash commands");
 		let mut commands = Vec::new();
 		{
@@ -142,7 +138,13 @@ impl EventHandler for Handler {
 				debug!("creating '{}' command", cmd.name);
 
 				let start = std::time::Instant::now();
-				let actions = parser::parse(cmd.action.clone()).unwrap();
+				let actions = match parser::parse(cmd.action.clone()) {
+					Ok(o) => o,
+					Err(e) => {
+						error!("\n{e}");
+						return;
+					}
+				};
 				trace!("parsing took {}ms", start.elapsed().as_millis());
 
 				let resolved_args = cmd
@@ -150,12 +152,22 @@ impl EventHandler for Handler {
 					.as_ref()
 					.unwrap_or(&vec![])
 					.iter()
-					.map(|a| ResolvedVarDecl { name: a.name.clone(), typ: a.typ })
+					.map(|a| ResolvedVarDecl {
+						name: a.name.clone(),
+						typ: a.typ,
+						init: None,
+					})
 					.collect();
 
 				let start = std::time::Instant::now();
-				let sema = sema::Sema::new(&builtin_functions, resolved_args);
-				let resolved = sema.resolve(actions).unwrap();
+				let mut sema = sema::Sema::new(&builtin_functions, resolved_args);
+				let resolved = match sema.resolve(actions) {
+					Ok(o) => o,
+					Err(e) => {
+						error!("\n{e}");
+						return;
+					}
+				};
 				trace!("resolving took {}ms", start.elapsed().as_millis());
 
 				parsed_commands.insert(

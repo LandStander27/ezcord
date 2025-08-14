@@ -67,6 +67,10 @@ fn parse_expr(input: &str) -> ParseResult<&str, Expr> {
 	.parse(input);
 }
 
+fn parse_decl(input: &str) -> ParseResult<&str, Decl> {
+	return delimited(multispace0, alt((map(parse_var_decl, Decl::VarDecl),)), multispace0).parse(input);
+}
+
 fn func(input: &str) -> ParseResult<&str, Call> {
 	let res = recognize(pair(alt((alpha1, tag("_"))), many0(alt((alphanumeric1, tag("_")))))).parse(input)?;
 
@@ -76,11 +80,25 @@ fn func(input: &str) -> ParseResult<&str, Call> {
 	return Ok((res.0, Call { name: ident.into(), args: res.1 }));
 }
 
+fn parse_var_decl(input: &str) -> ParseResult<&str, VarDecl> {
+	let res = parse_ident(input)?;
+
+	let ident = res.1;
+	let input = delimited(multispace0, char('='), multispace0)
+		.parse(res.0)?
+		.0;
+	let res = cut(context("invalid expression", parse_expr)).parse(input)?;
+	let init = res.1;
+
+	return Ok((res.0, VarDecl { ident, init }));
+}
+
 fn parse_stmt(input: &str) -> ParseResult<&str, Token> {
 	return preceded(
 		multispace0,
 		alt((
 			// map(strings::parse_string, Token::Sequence),
+			map(map(parse_decl, Stmt::Decl), Token::Stmt),
 			map(map(parse_expr, Stmt::Expr), Token::Stmt),
 			// map(key, Token::Key),
 			map(take_while1(|c: char| !c.is_whitespace()), Token::Unknown),
@@ -102,13 +120,13 @@ pub(crate) fn parse(input: String) -> anyhow::Result<Vec<Stmt>> {
 			match e {
 				nom::Err::Error(ref e) | nom::Err::Failure(ref e) => {
 					let s = error::convert_error(&input, e.clone());
-					error!(s);
+					// error!(s);
 					return anyhow!("{s}");
 				}
 				_ => {}
 			}
 
-			error!(?e);
+			// error!(?e);
 			return anyhow!("{e}").context("parse error");
 		})?;
 

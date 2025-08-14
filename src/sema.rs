@@ -18,12 +18,15 @@ use types::*;
 
 pub struct Sema<'a> {
 	functions: &'a Vec<Function>,
-	vars: Vec<ResolvedVarDecl>,
+	vars: Vec<Vec<ResolvedVarDecl>>,
 }
 
 impl<'a> Sema<'a> {
 	pub fn new(functions: &'a Vec<Function>, vars: Vec<ResolvedVarDecl>) -> Self {
-		return Self { functions, vars };
+		return Self {
+			functions,
+			vars: vec![vars, Vec::new()],
+		};
 	}
 
 	fn get_function(&self, ident: &str) -> anyhow::Result<&Function> {
@@ -47,12 +50,16 @@ impl<'a> Sema<'a> {
 		for (i, arg) in call.args.into_iter().enumerate() {
 			let resolved = self.resolve_expr(arg)?;
 			if resolved.get_type() != func.args()[i].typ {
-				return Err(anyhow!("invalid argument type; function signature: {}", func.signature()));
+				return Err(anyhow!("invalid argument type; function signature: {}; got: {}", func.signature(), resolved.get_type()));
 			}
 			args.push(resolved);
 		}
 
-		return Ok(ResolvedCall { name: call.name, args });
+		return Ok(ResolvedCall {
+			name: call.name,
+			args,
+			ret_type: func.get_type(),
+		});
 	}
 
 	fn resolve_expr(&self, expr: Expr) -> anyhow::Result<ResolvedExpr> {
@@ -61,23 +68,46 @@ impl<'a> Sema<'a> {
 			Expr::Number(number) => ResolvedExpr::Number(LiteralNumber { number }),
 			Expr::String(s) => ResolvedExpr::String(LiteralString { s }),
 			Expr::Ident(ident) => {
-				for var in &self.vars {
-					if var.name == ident {
-						return Ok(ResolvedExpr::Ident(ResolvedVarExpr { name: var.name.clone(), typ: var.typ }));
+				for scope in &self.vars {
+					for var in scope {
+						if var.name == ident {
+							return Ok(ResolvedExpr::Ident(ResolvedVarExpr { name: var.name.clone(), typ: var.typ }));
+						}
 					}
 				}
 
 				return Err(anyhow!("invalid variable"));
 			}
+			_ => todo!(),
 		});
 	}
 
-	pub fn resolve(&self, input: Vec<Stmt>) -> anyhow::Result<Vec<ResolvedStmt>> {
+	fn resolve_decl(&self, decl: Decl) -> anyhow::Result<ResolvedDecl> {
+		return Ok(match decl {
+			Decl::VarDecl(var) => {
+				let expr = self.resolve_expr(var.init)?;
+
+				ResolvedDecl::Var(ResolvedVarDecl {
+					name: var.ident,
+					typ: expr.get_type(),
+					init: Some(expr),
+				})
+			}
+		});
+	}
+
+	pub fn resolve(&mut self, input: Vec<Stmt>) -> anyhow::Result<Vec<ResolvedStmt>> {
 		let mut resolved_stmts = Vec::new();
 
 		for stmt in input {
 			match stmt {
 				Stmt::Expr(expr) => resolved_stmts.push(ResolvedStmt::Expr(self.resolve_expr(expr)?)),
+				Stmt::Decl(decl) => {
+					let decl = self.resolve_decl(decl)?;
+					let ResolvedDecl::Var(ref var) = decl;
+					self.vars.last_mut().unwrap().push(var.clone());
+					resolved_stmts.push(ResolvedStmt::Decl(decl));
+				}
 			}
 
 			#[cfg(feature = "parse_debug")]

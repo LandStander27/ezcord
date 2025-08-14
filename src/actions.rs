@@ -1,55 +1,117 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
+use chrono::prelude::*;
 use ezcord_derive::DynamicEnum;
 use serenity::all::*;
 use std::sync::Arc;
 use tracing::error;
 
-use crate::sema::{decl::*, expr::*, types::Type};
+use crate::sema::{decl::*, expr::*, stmt::*, types::Type};
 
 pub struct RuntimeVar {
 	pub name: String,
 	pub value: ResolvedExpr,
 }
 
-pub struct RunnerContext {
-	vars: Vec<RuntimeVar>,
+pub struct RunnerContext<'a> {
+	vars: Vec<Vec<RuntimeVar>>,
+	functions: &'a Vec<Function>,
+	interaction: &'a CommandInteraction,
+	ctx: &'a Context,
+	shard_manager: Arc<ShardManager>,
 }
 
-impl RunnerContext {
-	pub fn new(vars: Vec<RuntimeVar>) -> Self {
-		return Self { vars };
+impl<'a> RunnerContext<'a> {
+	pub fn new(input_vars: Vec<RuntimeVar>, functions: &'a Vec<Function>, interaction: &'a CommandInteraction, ctx: &'a Context, shard_manager: Arc<ShardManager>) -> Self {
+		return Self {
+			vars: vec![input_vars, Vec::new()],
+			functions,
+			interaction,
+			ctx,
+			shard_manager,
+		};
 	}
 
-	pub async fn run(&self, function: &Function, args: &[ResolvedExpr], command: &CommandInteraction, ctx: &Context, shard_manager: &Arc<ShardManager>) -> Result<()> {
-		let mut converted_args = Vec::with_capacity(args.len());
-		for arg in args {
-			if let ResolvedExpr::Ident(var) = arg {
-				for i in &self.vars {
-					if i.name == var.name {
-						converted_args.push(&i.value);
+	async fn execute_expr(&self, expr: &ResolvedExpr) -> Result<Option<ResolvedExpr>> {
+		match expr {
+			ResolvedExpr::Call(func) => {
+				for builtin in self.functions.iter() {
+					if builtin.name() == func.name.as_str() {
+						return self.run(builtin, &func.args).await;
 					}
 				}
-			} else {
-				converted_args.push(arg);
+
+				return Err(anyhow!("function does not exist"));
+			}
+			ResolvedExpr::Ident(var) => {
+				for scope in &self.vars {
+					for i in scope {
+						if i.name == var.name {
+							return Ok(Some(i.value.clone()));
+						}
+					}
+				}
+
+				return Err(anyhow!("var does not exist"));
+			}
+			_ => return Ok(Some(expr.clone())),
+		}
+	}
+
+	async fn execute_decl(&mut self, decl: &ResolvedDecl) -> Result<()> {
+		match decl {
+			ResolvedDecl::Var(var) => {
+				let runtime = RuntimeVar {
+					name: var.name.clone(),
+					value: self
+						.execute_expr(var.init.as_ref().unwrap())
+						.await?
+						.unwrap(),
+				};
+
+				self.vars.last_mut().unwrap().push(runtime);
+			}
+		}
+		return Ok(());
+	}
+
+	pub async fn execute_stmt(&mut self, stmt: &'a ResolvedStmt) -> Result<()> {
+		match stmt {
+			ResolvedStmt::Decl(decl) => {
+				self.execute_decl(decl).await?;
+			}
+			ResolvedStmt::Expr(expr) => {
+				self.execute_expr(expr).await?;
+			}
+		};
+
+		return Ok(());
+	}
+
+	async fn run(&self, function: &Function, args: &[ResolvedExpr]) -> Result<Option<ResolvedExpr>> {
+		let mut converted_args = Vec::with_capacity(args.len());
+		for arg in args {
+			match Box::pin(self.execute_expr(arg)).await? {
+				Some(s) => converted_args.push(s),
+				None => return Err(anyhow!("value is void")),
 			}
 		}
 
-		function
-			.run(converted_args.as_slice(), command, ctx, shard_manager)
-			.await?;
-
-		return Ok(());
+		return function
+			.run(converted_args.as_slice(), self.interaction, self.ctx, &self.shard_manager)
+			.await;
 	}
 }
 
 #[derive(DynamicEnum)]
+#[call(pub fn get_type(&self) -> Type)]
 #[call(pub fn args(&self) -> &Vec<ResolvedParamDecl>)]
 #[call(pub fn name(&self) -> &str)]
-#[call(async fn run(&self, args: &[&ResolvedExpr], command: &CommandInteraction, ctx: &Context, shard_manager: &Arc<ShardManager>) -> Result<()>)]
+#[call(async fn run(&self, args: &[ResolvedExpr], command: &CommandInteraction, ctx: &Context, shard_manager: &Arc<ShardManager>) -> Result<Option<ResolvedExpr>>)]
 pub enum Function {
 	Delay(Delay),
 	Respond(Respond),
 	Exit(Exit),
+	Time(Time),
 }
 
 impl Function {
@@ -84,16 +146,20 @@ impl Delay {
 		return "delay";
 	}
 
+	fn get_type(&self) -> Type {
+		return Type::Void;
+	}
+
 	fn args(&self) -> &Vec<ResolvedParamDecl> {
 		return &self.args;
 	}
 
-	async fn run(&self, args: &[&ResolvedExpr], _command: &CommandInteraction, _ctx: &Context, _shard_manager: &Arc<ShardManager>) -> Result<()> {
+	async fn run(&self, args: &[ResolvedExpr], _command: &CommandInteraction, _ctx: &Context, _shard_manager: &Arc<ShardManager>) -> Result<Option<ResolvedExpr>> {
 		if let ResolvedExpr::Number(LiteralNumber { number }) = args[0] {
-			tokio::time::sleep(std::time::Duration::from_millis(*number as u64)).await;
+			tokio::time::sleep(std::time::Duration::from_millis(number as u64)).await;
 		}
 
-		return Ok(());
+		return Ok(None);
 	}
 }
 
@@ -117,12 +183,16 @@ impl Respond {
 		return "respond";
 	}
 
+	fn get_type(&self) -> Type {
+		return Type::Void;
+	}
+
 	fn args(&self) -> &Vec<ResolvedParamDecl> {
 		return &self.args;
 	}
 
-	async fn run(&self, args: &[&ResolvedExpr], command: &CommandInteraction, ctx: &Context, _shard_manager: &Arc<ShardManager>) -> Result<()> {
-		if let ResolvedExpr::String(LiteralString { s }) = args[0] {
+	async fn run(&self, args: &[ResolvedExpr], command: &CommandInteraction, ctx: &Context, _shard_manager: &Arc<ShardManager>) -> Result<Option<ResolvedExpr>> {
+		if let ResolvedExpr::String(LiteralString { s }) = &args[0] {
 			let data = CreateInteractionResponseMessage::new().content(s);
 			let builder = CreateInteractionResponse::Message(data);
 			if let Err(why) = command.create_response(&ctx.http, builder).await {
@@ -130,7 +200,7 @@ impl Respond {
 			}
 		}
 
-		return Ok(());
+		return Ok(None);
 	}
 }
 
@@ -149,15 +219,48 @@ impl Exit {
 		return "exit";
 	}
 
+	fn get_type(&self) -> Type {
+		return Type::Void;
+	}
+
 	fn args(&self) -> &Vec<ResolvedParamDecl> {
 		return &self.args;
 	}
 
-	async fn run(&self, _args: &[&ResolvedExpr], _command: &CommandInteraction, _ctx: &Context, shard_manager: &Arc<ShardManager>) -> Result<()> {
-		// let data = ctx.data.write().await;
-		// let manager = data.get::<ShardManagerContainer>().unwrap();
+	async fn run(&self, _args: &[ResolvedExpr], _command: &CommandInteraction, _ctx: &Context, shard_manager: &Arc<ShardManager>) -> Result<Option<ResolvedExpr>> {
 		shard_manager.shutdown_all().await;
+		return Ok(None);
+	}
+}
 
-		return Ok(());
+pub struct Time {
+	args: Vec<ResolvedParamDecl>,
+}
+
+impl Default for Time {
+	fn default() -> Self {
+		return Self { args: vec![] };
+	}
+}
+
+impl Time {
+	fn name(&self) -> &str {
+		return "time";
+	}
+
+	fn get_type(&self) -> Type {
+		return Type::String;
+	}
+
+	fn args(&self) -> &Vec<ResolvedParamDecl> {
+		return &self.args;
+	}
+
+	async fn run(&self, _args: &[ResolvedExpr], _command: &CommandInteraction, _ctx: &Context, _shard_manager: &Arc<ShardManager>) -> Result<Option<ResolvedExpr>> {
+		let now: DateTime<Local> = Local::now();
+
+		return Ok(Some(ResolvedExpr::String(LiteralString {
+			s: now.format("%Y-%m-%d %H:%M:%S").to_string(),
+		})));
 	}
 }
