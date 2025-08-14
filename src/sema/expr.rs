@@ -13,6 +13,17 @@ impl LiteralString {
 }
 
 #[derive(Debug, Clone)]
+pub struct FmtString {
+	pub fragments: Vec<ResolvedExpr>,
+}
+
+impl FmtString {
+	fn get_type(&self) -> Type {
+		return Type::String;
+	}
+}
+
+#[derive(Debug, Clone)]
 pub struct LiteralNumber {
 	pub number: i64,
 }
@@ -27,6 +38,7 @@ impl LiteralNumber {
 #[call(pub fn get_type(&self) -> Type)]
 pub enum ResolvedExpr {
 	String(LiteralString),
+	FmtString(FmtString),
 	Number(LiteralNumber),
 	Ident(ResolvedVarExpr),
 	Call(ResolvedCall),

@@ -62,11 +62,24 @@ impl<'a> Sema<'a> {
 		});
 	}
 
+	fn resolve_str(&self, s: LitOrFmtString) -> anyhow::Result<ResolvedExpr> {
+		match s {
+			LitOrFmtString::Lit(s) => Ok(ResolvedExpr::String(LiteralString { s })),
+			LitOrFmtString::Fmt(fmt) => {
+				let mut v = Vec::new();
+				for frag in fmt.into_iter() {
+					v.push(self.resolve_expr(frag)?);
+				}
+				Ok(ResolvedExpr::FmtString(FmtString { fragments: v }))
+			}
+		}
+	}
+
 	fn resolve_expr(&self, expr: Expr) -> anyhow::Result<ResolvedExpr> {
 		return Ok(match expr {
 			Expr::Call(call) => ResolvedExpr::Call(self.resolve_call(call)?),
 			Expr::Number(number) => ResolvedExpr::Number(LiteralNumber { number }),
-			Expr::String(s) => ResolvedExpr::String(LiteralString { s }),
+			Expr::String(s) => self.resolve_str(s)?,
 			Expr::Ident(ident) => {
 				for scope in &self.vars {
 					for var in scope {
@@ -78,7 +91,6 @@ impl<'a> Sema<'a> {
 
 				return Err(anyhow!("invalid variable"));
 			}
-			_ => todo!(),
 		});
 	}
 

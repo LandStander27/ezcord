@@ -5,7 +5,13 @@ use super::*;
 fn test_string_parsing() {
 	let data = "\"tab:\\tafter tab, newline:\\nnew line, quote: \\\", emoji: \\u{1F602}, newline:\\nescaped whitespace: \\    abc\"";
 	let result = strings::parse_string(data);
-	assert_eq!(result, Ok(("", "tab:\tafter tab, newline:\nnew line, quote: \", emoji: 😂, newline:\nescaped whitespace: abc".into())));
+	assert_eq!(
+		result,
+		Ok((
+			"",
+			LitOrFmtString::Lit("tab:\tafter tab, newline:\nnew line, quote: \", emoji: 😂, newline:\nescaped whitespace: abc".into())
+		))
+	);
 
 	assert!(strings::parse_string("\"this is another test\"").is_ok());
 	assert!(strings::parse_string("\"this is another test").is_err());

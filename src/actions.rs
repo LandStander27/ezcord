@@ -53,6 +53,20 @@ impl<'a> RunnerContext<'a> {
 
 				return Err(anyhow!("var does not exist"));
 			}
+			ResolvedExpr::FmtString(fmt) => {
+				let mut s = String::new();
+				for frag in &fmt.fragments {
+					let expr = Box::pin(self.execute_expr(frag)).await?;
+					if let Some(expr) = expr {
+						match expr {
+							ResolvedExpr::String(str) => s.push_str(&str.s),
+							ResolvedExpr::Number(num) => s.push_str(&num.number.to_string()),
+							_ => todo!(),
+						}
+					}
+				}
+				return Ok(Some(ResolvedExpr::String(LiteralString { s })));
+			}
 			_ => return Ok(Some(expr.clone())),
 		}
 	}

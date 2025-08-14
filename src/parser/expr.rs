@@ -1,21 +1,21 @@
 // use super::strings;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
-	String(String),
-	FmtString(FmtString),
+	String(LitOrFmtString),
 	Number(i64),
 	Ident(String),
 	Call(Call),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Call {
 	pub name: String,
 	pub args: Vec<Expr>,
 }
 
-#[derive(Debug)]
-pub struct FmtString {
-	pub segments: Vec<Expr>,
+#[derive(Debug, Clone, PartialEq)]
+pub enum LitOrFmtString {
+	Lit(String),
+	Fmt(Vec<Expr>),
 }
