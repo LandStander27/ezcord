@@ -130,6 +130,24 @@ fn parse_if_stmt(input: &str) -> ParseResult<&str, IfStmt> {
 	return Ok((res.0, IfStmt { cond, block: res.1 }));
 }
 
+fn parse_while_stmt(input: &str) -> ParseResult<&str, WhileStmt> {
+	let input = terminated(tag("while"), multispace1).parse(input)?.0;
+
+	let res = cut(context("invalid condition", parse_expr)).parse(input)?;
+	let cond = res.1;
+
+	let res = cut(context(
+		"invalid block",
+		delimited(
+			delimited(multispace0, char('{'), multispace0),
+			context("invalid statement", parse_multi_stmt),
+			delimited(multispace0, char('}'), multispace0),
+		),
+	))
+	.parse(res.0)?;
+	return Ok((res.0, WhileStmt { cond, block: res.1 }));
+}
+
 fn parse_comment(input: &str) -> ParseResult<&str, ()> {
 	let rest = preceded(char('#'), take_till(|x| x == '\n'))
 		.parse(input)?
@@ -143,6 +161,7 @@ fn parse_stmt(input: &str) -> ParseResult<&str, Token> {
 		alt((
 			value(Token::Comment, parse_comment),
 			map(map(parse_if_stmt, Stmt::If), Token::Stmt),
+			map(map(parse_while_stmt, Stmt::While), Token::Stmt),
 			map(map(parse_decl, Stmt::Decl), Token::Stmt),
 			map(map(parse_var_set, Stmt::VarSet), Token::Stmt),
 			map(map(parse_expr, Stmt::Expr), Token::Stmt),

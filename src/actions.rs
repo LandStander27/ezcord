@@ -109,6 +109,20 @@ impl<'a> RunnerContext<'a> {
 					}
 				}
 			}
+			ResolvedStmt::While(while_stmt) => loop {
+				let cond = self.execute_expr(&while_stmt.cond).await?.unwrap();
+				if let ResolvedExpr::Bool(cond) = cond {
+					if cond.value {
+						self.vars.push(Vec::new());
+						for stmt in &while_stmt.block {
+							Box::pin(self.execute_stmt(stmt)).await?;
+						}
+						self.vars.pop();
+					} else {
+						break;
+					}
+				}
+			},
 			ResolvedStmt::VarSet(var) => {
 				let expr = self.execute_expr(&var.expr).await?.unwrap();
 

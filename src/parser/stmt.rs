@@ -6,6 +6,7 @@ pub enum Stmt {
 	Expr(Expr),
 	Decl(Decl),
 	If(IfStmt),
+	While(WhileStmt),
 	VarSet(VarSetStmt),
 }
 
@@ -17,6 +18,12 @@ pub struct VarSetStmt {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct IfStmt {
+	pub cond: Expr,
+	pub block: Vec<Stmt>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WhileStmt {
 	pub cond: Expr,
 	pub block: Vec<Stmt>,
 }

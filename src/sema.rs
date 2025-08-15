@@ -130,6 +130,7 @@ impl<'a> Sema<'a> {
 					resolved_stmts.push(ResolvedStmt::Decl(decl));
 				}
 				Stmt::If(if_stmt) => resolved_stmts.push(ResolvedStmt::If(self.resolve_if_stmt(if_stmt)?)),
+				Stmt::While(while_stmt) => resolved_stmts.push(ResolvedStmt::While(self.resolve_while_stmt(while_stmt)?)),
 				Stmt::VarSet(var) => {
 					let mut selected_var = None;
 					for scope in self.vars.iter().rev() {
@@ -168,6 +169,16 @@ impl<'a> Sema<'a> {
 
 		let block = self.resolve_block(stmt.block)?;
 		return Ok(ResolvedIfStmt { cond, block });
+	}
+
+	fn resolve_while_stmt(&mut self, stmt: WhileStmt) -> anyhow::Result<ResolvedWhileStmt> {
+		let cond = self.resolve_expr(stmt.cond)?;
+		if cond.get_type() != Type::Bool {
+			return Err(anyhow!("if condition must return a boolean; got: {}", cond.get_type()));
+		}
+
+		let block = self.resolve_block(stmt.block)?;
+		return Ok(ResolvedWhileStmt { cond, block });
 	}
 
 	pub fn resolve(&mut self, input: Vec<Stmt>) -> anyhow::Result<Vec<ResolvedStmt>> {
