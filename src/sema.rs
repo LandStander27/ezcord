@@ -23,10 +23,7 @@ pub struct Sema<'a> {
 
 impl<'a> Sema<'a> {
 	pub fn new(functions: &'a Vec<Function>, vars: Vec<ResolvedVarDecl>) -> Self {
-		return Self {
-			functions,
-			vars: vec![vars, Vec::new()],
-		};
+		return Self { functions, vars: vec![vars] };
 	}
 
 	fn get_function(&self, ident: &str) -> anyhow::Result<&Function> {
@@ -79,9 +76,10 @@ impl<'a> Sema<'a> {
 		return Ok(match expr {
 			Expr::Call(call) => ResolvedExpr::Call(self.resolve_call(call)?),
 			Expr::Number(number) => ResolvedExpr::Number(LiteralNumber { number }),
+			Expr::Bool(value) => ResolvedExpr::Bool(LiteralBool { value }),
 			Expr::String(s) => self.resolve_str(s)?,
 			Expr::Ident(ident) => {
-				for scope in &self.vars {
+				for scope in self.vars.iter().rev() {
 					for var in scope {
 						if var.name == ident {
 							return Ok(ResolvedExpr::Ident(ResolvedVarExpr { name: var.name.clone(), typ: var.typ }));
@@ -94,9 +92,19 @@ impl<'a> Sema<'a> {
 		});
 	}
 
-	fn resolve_decl(&self, decl: Decl) -> anyhow::Result<ResolvedDecl> {
+	fn resolve_decl(&mut self, decl: Decl) -> anyhow::Result<ResolvedDecl> {
 		return Ok(match decl {
 			Decl::VarDecl(var) => {
+				let i = self
+					.vars
+					.last()
+					.unwrap()
+					.iter()
+					.position(|x| x.name == var.ident);
+				if let Some(i) = i {
+					self.vars.swap_remove(i);
+				}
+
 				let expr = self.resolve_expr(var.init)?;
 
 				ResolvedDecl::Var(ResolvedVarDecl {
@@ -108,10 +116,11 @@ impl<'a> Sema<'a> {
 		});
 	}
 
-	pub fn resolve(&mut self, input: Vec<Stmt>) -> anyhow::Result<Vec<ResolvedStmt>> {
+	fn resolve_block(&mut self, block: Vec<Stmt>) -> anyhow::Result<Vec<ResolvedStmt>> {
+		self.vars.push(Vec::new());
 		let mut resolved_stmts = Vec::new();
 
-		for stmt in input {
+		for stmt in block {
 			match stmt {
 				Stmt::Expr(expr) => resolved_stmts.push(ResolvedStmt::Expr(self.resolve_expr(expr)?)),
 				Stmt::Decl(decl) => {
@@ -120,12 +129,48 @@ impl<'a> Sema<'a> {
 					self.vars.last_mut().unwrap().push(var.clone());
 					resolved_stmts.push(ResolvedStmt::Decl(decl));
 				}
+				Stmt::If(if_stmt) => resolved_stmts.push(ResolvedStmt::If(self.resolve_if_stmt(if_stmt)?)),
+				Stmt::VarSet(var) => {
+					let mut selected_var = None;
+					for scope in self.vars.iter().rev() {
+						for i in scope {
+							if i.name == var.ident {
+								selected_var = Some(i);
+							}
+						}
+					}
+
+					if let Some(selected_var) = selected_var {
+						let expr = self.resolve_expr(var.expr)?;
+						if expr.get_type() != selected_var.typ {
+							return Err(anyhow!("variable assignment type mismatch"));
+						}
+						resolved_stmts.push(ResolvedStmt::VarSet(ResolvedVarSet { name: var.ident, expr }));
+					} else {
+						return Err(anyhow!("variable does not exist"));
+					}
+				}
 			}
 
 			#[cfg(feature = "parse_debug")]
 			dbg!(resolved_stmts.last().unwrap());
 		}
 
+		self.vars.pop();
 		return Ok(resolved_stmts);
+	}
+
+	fn resolve_if_stmt(&mut self, stmt: IfStmt) -> anyhow::Result<ResolvedIfStmt> {
+		let cond = self.resolve_expr(stmt.cond)?;
+		if cond.get_type() != Type::Bool {
+			return Err(anyhow!("if condition must return a boolean; got: {}", cond.get_type()));
+		}
+
+		let block = self.resolve_block(stmt.block)?;
+		return Ok(ResolvedIfStmt { cond, block });
+	}
+
+	pub fn resolve(&mut self, input: Vec<Stmt>) -> anyhow::Result<Vec<ResolvedStmt>> {
+		return self.resolve_block(input);
 	}
 }

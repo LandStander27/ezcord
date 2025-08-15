@@ -7,6 +7,7 @@ impl From<ArgType> for CommandOptionType {
 		return match val {
 			ArgType::Number => CommandOptionType::Integer,
 			ArgType::String => CommandOptionType::String,
+			ArgType::Bool => CommandOptionType::Boolean,
 			ArgType::Void => panic!("argument type cannot be 'void'"),
 		};
 	}

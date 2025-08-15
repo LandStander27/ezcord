@@ -1,9 +1,9 @@
 use nom::{
 	IResult, Parser,
 	branch::alt,
-	bytes::complete::{tag, take_while1},
-	character::complete::{alpha1, alphanumeric1, char, multispace0, one_of},
-	combinator::{cut, map, opt, recognize},
+	bytes::complete::{tag, take_till},
+	character::complete::{alpha1, alphanumeric1, char, multispace0, multispace1, one_of},
+	combinator::{cut, map, opt, recognize, value},
 	error::{ParseError, context},
 	multi::{many0, many1, separated_list0},
 	sequence::{delimited, pair, preceded, terminated},
@@ -11,7 +11,6 @@ use nom::{
 use nom_language::error::{VerboseError, VerboseErrorKind};
 
 use anyhow::anyhow;
-use tracing::error;
 
 mod error;
 mod strings;
@@ -25,10 +24,12 @@ use stmt::*;
 
 type ParseResult<'a, I, O> = IResult<I, O, VerboseError<&'a str>>;
 
-#[derive(Debug)]
-enum Token<'a> {
+#[derive(Debug, Clone, PartialEq)]
+enum Token {
 	Stmt(Stmt),
-	Unknown(&'a str),
+	RBracket,
+	Comment,
+	// Unknown(&'a str),
 }
 
 fn parse_ident(input: &str) -> ParseResult<&str, String> {
@@ -53,12 +54,17 @@ fn parse_number(input: &str) -> ParseResult<&str, i64> {
 	return Ok((res.0, num));
 }
 
+fn parse_bool(input: &str) -> ParseResult<&str, bool> {
+	return alt((value(false, tag("false")), value(true, tag("true")))).parse(input);
+}
+
 fn parse_expr(input: &str) -> ParseResult<&str, Expr> {
 	return delimited(
 		multispace0,
 		alt((
 			map(strings::parse_string, Expr::String),
 			map(parse_number, Expr::Number),
+			map(parse_bool, Expr::Bool),
 			map(func, Expr::Call),
 			map(parse_ident, Expr::Ident),
 		)),
@@ -80,11 +86,24 @@ fn func(input: &str) -> ParseResult<&str, Call> {
 	return Ok((res.0, Call { name: ident.into(), args: res.1 }));
 }
 
+fn parse_var_set(input: &str) -> ParseResult<&str, VarSetStmt> {
+	let res = parse_ident(input)?;
+
+	let ident = res.1;
+	let input = delimited(multispace0, tag("="), multispace0)
+		.parse(res.0)?
+		.0;
+	let res = cut(context("invalid expression", parse_expr)).parse(input)?;
+	let expr = res.1;
+
+	return Ok((res.0, VarSetStmt { ident, expr }));
+}
+
 fn parse_var_decl(input: &str) -> ParseResult<&str, VarDecl> {
 	let res = parse_ident(input)?;
 
 	let ident = res.1;
-	let input = delimited(multispace0, char('='), multispace0)
+	let input = delimited(multispace0, tag(":="), multispace0)
 		.parse(res.0)?
 		.0;
 	let res = cut(context("invalid expression", parse_expr)).parse(input)?;
@@ -93,56 +112,65 @@ fn parse_var_decl(input: &str) -> ParseResult<&str, VarDecl> {
 	return Ok((res.0, VarDecl { ident, init }));
 }
 
+fn parse_if_stmt(input: &str) -> ParseResult<&str, IfStmt> {
+	let input = terminated(tag("if"), multispace1).parse(input)?.0;
+
+	let res = cut(context("invalid condition", parse_expr)).parse(input)?;
+	let cond = res.1;
+
+	let res = cut(context(
+		"invalid block",
+		delimited(
+			delimited(multispace0, char('{'), multispace0),
+			context("invalid statement", parse_multi_stmt),
+			delimited(multispace0, char('}'), multispace0),
+		),
+	))
+	.parse(res.0)?;
+	return Ok((res.0, IfStmt { cond, block: res.1 }));
+}
+
+fn parse_comment(input: &str) -> ParseResult<&str, ()> {
+	let rest = preceded(char('#'), take_till(|x| x == '\n'))
+		.parse(input)?
+		.0;
+	return Ok((rest, ()));
+}
+
 fn parse_stmt(input: &str) -> ParseResult<&str, Token> {
-	return preceded(
+	return delimited(
 		multispace0,
 		alt((
-			// map(strings::parse_string, Token::Sequence),
+			value(Token::Comment, parse_comment),
+			map(map(parse_if_stmt, Stmt::If), Token::Stmt),
 			map(map(parse_decl, Stmt::Decl), Token::Stmt),
+			map(map(parse_var_set, Stmt::VarSet), Token::Stmt),
 			map(map(parse_expr, Stmt::Expr), Token::Stmt),
-			// map(key, Token::Key),
-			map(take_while1(|c: char| !c.is_whitespace()), Token::Unknown),
+			value(Token::RBracket, char('}')),
 		)),
+		multispace0,
 	)
 	.parse(input);
 }
 
-pub(crate) fn parse(input: String) -> anyhow::Result<Vec<Stmt>> {
-	if input.chars().all(|c| c.is_whitespace()) {
-		return Ok(Vec::new());
-	}
-
-	let mut rest: &str = input.as_str();
+fn parse_multi_stmt(input: &str) -> ParseResult<&str, Vec<Stmt>> {
+	let mut rest: &str = input;
 	let mut actions: Vec<Stmt> = Vec::new();
 
 	loop {
-		let res = parse_stmt(rest).map_err(|e| {
-			match e {
-				nom::Err::Error(ref e) | nom::Err::Failure(ref e) => {
-					let s = error::convert_error(&input, e.clone());
-					// error!(s);
-					return anyhow!("{s}");
-				}
-				_ => {}
-			}
-
-			// error!(?e);
-			return anyhow!("{e}").context("parse error");
-		})?;
-
+		let res = parse_stmt(rest)?;
+		if res.1 == Token::RBracket {
+			break;
+		}
 		rest = res.0;
 
 		#[cfg(feature = "parse_debug")]
 		dbg!(&res.1);
 
 		match res.1 {
-			Token::Unknown(token) => {
-				error!("unknown token: {token}");
-				return Err(anyhow!("unknown token: {token}"));
-			}
-			Token::Stmt(stmt) => {
-				actions.push(stmt);
-			}
+			Token::Stmt(stmt) => actions.push(stmt),
+			Token::Comment => {}
+			_ => unreachable!(),
 		}
 
 		if rest.is_empty() || rest.chars().all(|c| c.is_whitespace()) {
@@ -150,5 +178,26 @@ pub(crate) fn parse(input: String) -> anyhow::Result<Vec<Stmt>> {
 		}
 	}
 
-	return Ok(actions);
+	return Ok((rest, actions));
+}
+
+pub(crate) fn parse(input: String) -> anyhow::Result<Vec<Stmt>> {
+	if input.chars().all(|c| c.is_whitespace()) {
+		return Ok(Vec::new());
+	}
+
+	let res = parse_multi_stmt(input.as_str()).map_err(|e| {
+		match e {
+			nom::Err::Error(ref e) | nom::Err::Failure(ref e) => {
+				let s = error::convert_error(&input, e.clone());
+				return anyhow!("{s}");
+			}
+			_ => {}
+		}
+
+		// error!(?e);
+		return anyhow!("{e}").context("parse error");
+	})?;
+
+	return Ok(res.1);
 }

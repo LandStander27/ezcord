@@ -141,7 +141,14 @@ impl EventHandler for Handler {
 				let actions = match parser::parse(cmd.action.clone()) {
 					Ok(o) => o,
 					Err(e) => {
-						error!("\n{e}");
+						error!(
+							"{}{e}",
+							if e.to_string().contains('\n') {
+								"\n"
+							} else {
+								""
+							}
+						);
 						return;
 					}
 				};
@@ -164,7 +171,14 @@ impl EventHandler for Handler {
 				let resolved = match sema.resolve(actions) {
 					Ok(o) => o,
 					Err(e) => {
-						error!("\n{e}");
+						error!(
+							"{}{e}",
+							if e.to_string().contains('\n') {
+								"\n"
+							} else {
+								""
+							}
+						);
 						return;
 					}
 				};

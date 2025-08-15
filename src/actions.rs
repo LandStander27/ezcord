@@ -43,7 +43,7 @@ impl<'a> RunnerContext<'a> {
 				return Err(anyhow!("function does not exist"));
 			}
 			ResolvedExpr::Ident(var) => {
-				for scope in &self.vars {
+				for scope in self.vars.iter().rev() {
 					for i in scope {
 						if i.name == var.name {
 							return Ok(Some(i.value.clone()));
@@ -61,6 +61,7 @@ impl<'a> RunnerContext<'a> {
 						match expr {
 							ResolvedExpr::String(str) => s.push_str(&str.s),
 							ResolvedExpr::Number(num) => s.push_str(&num.number.to_string()),
+							ResolvedExpr::Bool(value) => s.push_str(if value.value { "true" } else { "false" }),
 							_ => todo!(),
 						}
 					}
@@ -95,6 +96,30 @@ impl<'a> RunnerContext<'a> {
 			}
 			ResolvedStmt::Expr(expr) => {
 				self.execute_expr(expr).await?;
+			}
+			ResolvedStmt::If(if_stmt) => {
+				let cond = self.execute_expr(&if_stmt.cond).await?.unwrap();
+				if let ResolvedExpr::Bool(cond) = cond {
+					if cond.value {
+						self.vars.push(Vec::new());
+						for stmt in &if_stmt.block {
+							Box::pin(self.execute_stmt(stmt)).await?;
+						}
+						self.vars.pop();
+					}
+				}
+			}
+			ResolvedStmt::VarSet(var) => {
+				let expr = self.execute_expr(&var.expr).await?.unwrap();
+
+				for scope in self.vars.iter_mut().rev() {
+					for i in scope {
+						if i.name == var.name {
+							i.value = expr;
+							return Ok(());
+						}
+					}
+				}
 			}
 		};
 

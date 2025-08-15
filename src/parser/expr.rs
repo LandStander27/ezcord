@@ -4,6 +4,7 @@
 pub enum Expr {
 	String(LitOrFmtString),
 	Number(i64),
+	Bool(bool),
 	Ident(String),
 	Call(Call),
 }

@@ -34,12 +34,24 @@ impl LiteralNumber {
 	}
 }
 
+#[derive(Debug, Clone)]
+pub struct LiteralBool {
+	pub value: bool,
+}
+
+impl LiteralBool {
+	fn get_type(&self) -> Type {
+		return Type::Bool;
+	}
+}
+
 #[derive(DynamicEnum, Debug, Clone)]
 #[call(pub fn get_type(&self) -> Type)]
 pub enum ResolvedExpr {
 	String(LiteralString),
 	FmtString(FmtString),
 	Number(LiteralNumber),
+	Bool(LiteralBool),
 	Ident(ResolvedVarExpr),
 	Call(ResolvedCall),
 }

@@ -4,6 +4,7 @@ use serde::Deserialize;
 pub enum Type {
 	String,
 	Number,
+	Bool,
 	Void,
 }
 
@@ -13,6 +14,7 @@ impl std::fmt::Display for Type {
 			Self::Void => "void",
 			Self::Number => "Number",
 			Self::String => "String",
+			Self::Bool => "Boolean",
 		});
 	}
 }
