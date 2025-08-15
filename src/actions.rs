@@ -5,6 +5,7 @@ use serenity::all::*;
 use std::sync::Arc;
 use tracing::error;
 
+use crate::parser::expr::*;
 use crate::sema::{decl::*, expr::*, stmt::*, types::Type};
 
 pub struct RuntimeVar {
@@ -20,6 +21,16 @@ pub struct RunnerContext<'a> {
 	shard_manager: Arc<ShardManager>,
 }
 
+macro_rules! force_downcast {
+	($upper:expr, $pattern:tt) => {{
+		if let ResolvedExpr::$pattern(inner) = $upper {
+			inner
+		} else {
+			panic!("from `force_downcast`");
+		}
+	}};
+}
+
 impl<'a> RunnerContext<'a> {
 	pub fn new(input_vars: Vec<RuntimeVar>, functions: &'a Vec<Function>, interaction: &'a CommandInteraction, ctx: &'a Context, shard_manager: Arc<ShardManager>) -> Self {
 		return Self {
@@ -29,6 +40,47 @@ impl<'a> RunnerContext<'a> {
 			ctx,
 			shard_manager,
 		};
+	}
+
+	async fn calculate_unary_operation(&self, unary: &ResolvedUnaryOp) -> Result<ResolvedExpr> {
+		return Ok(match unary.op {
+			Operation::Binary(_) => unreachable!(),
+			Operation::Unary(ref op) => {
+				let expr = self.execute_expr(unary.expr.as_ref()).await?.unwrap();
+				match op {
+					UnaryOperation::Neg => ResolvedExpr::Number(LiteralNumber {
+						number: -force_downcast!(expr, Number).number,
+					}),
+					UnaryOperation::Not => ResolvedExpr::Bool(LiteralBool {
+						value: !force_downcast!(expr, Bool).value,
+					}),
+				}
+			}
+		});
+	}
+
+	async fn calculate_binary_operation(&self, binary: &ResolvedBinaryOp) -> Result<ResolvedExpr> {
+		return Ok(match binary.op {
+			Operation::Binary(ref op) => {
+				let left = self.execute_expr(binary.left.as_ref()).await?.unwrap();
+				let right = self.execute_expr(binary.right.as_ref()).await?.unwrap();
+				match op {
+					BinOperation::Add => ResolvedExpr::Number(LiteralNumber {
+						number: force_downcast!(left, Number).number + force_downcast!(right, Number).number,
+					}),
+					BinOperation::Sub => ResolvedExpr::Number(LiteralNumber {
+						number: force_downcast!(left, Number).number - force_downcast!(right, Number).number,
+					}),
+					BinOperation::Mul => ResolvedExpr::Number(LiteralNumber {
+						number: force_downcast!(left, Number).number * force_downcast!(right, Number).number,
+					}),
+					BinOperation::Div => ResolvedExpr::Number(LiteralNumber {
+						number: force_downcast!(left, Number).number / force_downcast!(right, Number).number,
+					}),
+				}
+			}
+			Operation::Unary(_) => unreachable!(),
+		});
 	}
 
 	async fn execute_expr(&self, expr: &ResolvedExpr) -> Result<Option<ResolvedExpr>> {
@@ -68,6 +120,9 @@ impl<'a> RunnerContext<'a> {
 				}
 				return Ok(Some(ResolvedExpr::String(LiteralString { s })));
 			}
+			ResolvedExpr::BinaryOp(binary) => Ok(Some(Box::pin(self.calculate_binary_operation(binary)).await?)),
+			ResolvedExpr::UnaryOp(unary) => Ok(Some(Box::pin(self.calculate_unary_operation(unary)).await?)),
+			ResolvedExpr::Group(group) => Box::pin(self.execute_expr(&group.expr)).await,
 			_ => return Ok(Some(expr.clone())),
 		}
 	}
@@ -189,7 +244,10 @@ pub struct Delay {
 impl Default for Delay {
 	fn default() -> Self {
 		return Self {
-			args: vec![ResolvedParamDecl { name: "ms".into(), typ: Type::Number }],
+			args: vec![ResolvedParamDecl {
+				name: "ms".into(),
+				typ: Type::Number,
+			}],
 		};
 	}
 }

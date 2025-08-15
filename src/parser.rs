@@ -58,10 +58,25 @@ fn parse_bool(input: &str) -> ParseResult<&str, bool> {
 	return alt((value(false, tag("false")), value(true, tag("true")))).parse(input);
 }
 
+fn parse_group(input: &str) -> ParseResult<&str, Group> {
+	return delimited(
+		terminated(char('('), multispace0),
+		map(map(parse_expr, Box::new), Group::new),
+		terminated(char(')'), multispace0),
+	)
+	.parse(input);
+}
+
 fn parse_expr(input: &str) -> ParseResult<&str, Expr> {
+	let left = parse_expr_single(input)?;
+	return parse_expr_rhs(left.0, left.1, 0);
+}
+
+fn parse_postfix(input: &str) -> ParseResult<&str, Expr> {
 	return delimited(
 		multispace0,
 		alt((
+			map(parse_group, Expr::Group),
 			map(strings::parse_string, Expr::String),
 			map(parse_number, Expr::Number),
 			map(parse_bool, Expr::Bool),
@@ -73,6 +88,82 @@ fn parse_expr(input: &str) -> ParseResult<&str, Expr> {
 	.parse(input);
 }
 
+fn parse_expr_single(input: &str) -> ParseResult<&str, Expr> {
+	if let Ok((input, unary)) = parse_unary_op(input) {
+		let (rest, expr) = parse_postfix(input)?;
+		return Ok((rest, Expr::UnaryOp(UnaryOp { expr: Box::new(expr), op: unary })));
+	}
+
+	return parse_postfix(input);
+}
+
+fn parse_unary_op(input: &str) -> ParseResult<&str, Operation> {
+	return context(
+		"invalid unary op",
+		delimited(
+			multispace0,
+			map(alt((value(UnaryOperation::Neg, char('-')), value(UnaryOperation::Not, char('!')))), Operation::Unary),
+			multispace0,
+		),
+	)
+	.parse(input);
+}
+
+fn parse_bin_op(input: &str) -> ParseResult<&str, Operation> {
+	return context(
+		"invalid binop",
+		delimited(
+			multispace0,
+			map(
+				alt((
+					value(BinOperation::Add, char('+')),
+					value(BinOperation::Sub, char('-')),
+					value(BinOperation::Div, char('/')),
+					value(BinOperation::Mul, char('*')),
+				)),
+				Operation::Binary,
+			),
+			multispace0,
+		),
+	)
+	.parse(input);
+}
+
+fn parse_expr_rhs(mut input: &str, mut lhs: Expr, prec: i64) -> ParseResult<&str, Expr> {
+	loop {
+		let (rest, op) = match parse_bin_op(input) {
+			Ok(o) => o,
+			Err(_e) => return Ok((input, lhs)),
+		};
+
+		let cur_op = op.prec();
+		if cur_op < prec {
+			return Ok((input, lhs));
+		}
+		input = rest;
+
+		let (rest, mut right) = parse_expr_single(input)?;
+		input = rest;
+
+		match parse_bin_op(input) {
+			Ok(o) => {
+				if cur_op < o.1.prec() {
+					let (rest, rhs_expr) = parse_expr_rhs(input, right, cur_op + 1)?;
+					right = rhs_expr;
+					input = rest;
+				}
+			}
+			Err(_e) => {}
+		};
+
+		lhs = Expr::BinOp(BinOp {
+			left: Box::new(lhs),
+			right: Box::new(right),
+			op,
+		});
+	}
+}
+
 fn parse_decl(input: &str) -> ParseResult<&str, Decl> {
 	return delimited(multispace0, alt((map(parse_var_decl, Decl::VarDecl),)), multispace0).parse(input);
 }
@@ -81,7 +172,12 @@ fn func(input: &str) -> ParseResult<&str, Call> {
 	let res = recognize(pair(alt((alpha1, tag("_"))), many0(alt((alphanumeric1, tag("_")))))).parse(input)?;
 
 	let ident = res.1;
-	let res = delimited(context("expected (", char('(')), cut(separated_list0(char(','), parse_expr)), cut(context("expected ')'", char(')')))).parse(res.0)?;
+	let res = delimited(
+		context("expected (", char('(')),
+		cut(separated_list0(char(','), parse_expr)),
+		cut(context("expected ')'", char(')'))),
+	)
+	.parse(res.0)?;
 
 	return Ok((res.0, Call { name: ident.into(), args: res.1 }));
 }

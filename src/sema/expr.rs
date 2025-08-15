@@ -1,4 +1,5 @@
 use super::Type;
+use crate::parser::expr::*;
 use ezcord_derive::DynamicEnum;
 
 #[derive(Debug, Clone)]
@@ -53,7 +54,46 @@ pub enum ResolvedExpr {
 	Number(LiteralNumber),
 	Bool(LiteralBool),
 	Ident(ResolvedVarExpr),
+	Group(ResolvedGroup),
+	UnaryOp(ResolvedUnaryOp),
+	BinaryOp(ResolvedBinaryOp),
 	Call(ResolvedCall),
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedGroup {
+	pub expr: Box<ResolvedExpr>,
+}
+
+impl ResolvedGroup {
+	fn get_type(&self) -> Type {
+		return self.expr.get_type();
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedUnaryOp {
+	pub expr: Box<ResolvedExpr>,
+	pub op: Operation,
+}
+
+impl ResolvedUnaryOp {
+	fn get_type(&self) -> Type {
+		return self.expr.get_type();
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedBinaryOp {
+	pub left: Box<ResolvedExpr>,
+	pub right: Box<ResolvedExpr>,
+	pub op: Operation,
+}
+
+impl ResolvedBinaryOp {
+	fn get_type(&self) -> Type {
+		return self.left.get_type();
+	}
 }
 
 #[derive(Debug, Clone)]

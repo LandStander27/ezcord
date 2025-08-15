@@ -194,7 +194,8 @@ impl EventHandler for Handler {
 
 				let mut slash_command = CreateCommand::new(&cmd.name).description(&cmd.desc);
 				for arg in cmd.args.as_ref().unwrap_or(&vec![]).iter() {
-					slash_command = slash_command.add_option(CreateCommandOption::new(arg.typ.into(), arg.name.clone(), arg.desc.clone()).required(!arg.optional.unwrap_or_default()));
+					slash_command =
+						slash_command.add_option(CreateCommandOption::new(arg.typ.into(), arg.name.clone(), arg.desc.clone()).required(!arg.optional.unwrap_or_default()));
 				}
 				commands.push(slash_command);
 			}

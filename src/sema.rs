@@ -36,6 +36,42 @@ impl<'a> Sema<'a> {
 		return Err(anyhow!("invalid function"));
 	}
 
+	fn resolve_binary_operation(&self, binary: BinOp) -> anyhow::Result<ResolvedBinaryOp> {
+		let left = self.resolve_expr(*binary.left)?;
+		let right = self.resolve_expr(*binary.right)?;
+
+		if left.get_type() != right.get_type() {
+			return Err(anyhow!("cannot do operation on '{}' and '{}'", left.get_type(), right.get_type()));
+		}
+
+		return Ok(ResolvedBinaryOp {
+			left: Box::new(left),
+			right: Box::new(right),
+			op: binary.op,
+		});
+	}
+
+	fn resolve_unary_operation(&self, unary: UnaryOp) -> anyhow::Result<ResolvedUnaryOp> {
+		let expr = self.resolve_expr(*unary.expr)?;
+
+		let needed_type = match unary.op {
+			Operation::Unary(ref unary) => match unary {
+				UnaryOperation::Neg => Type::Number,
+				UnaryOperation::Not => Type::Bool,
+			},
+			_ => unreachable!(),
+		};
+
+		if expr.get_type() != needed_type {
+			return Err(anyhow!("cannot do operation on '{}', expected '{}'", expr.get_type(), needed_type));
+		}
+
+		return Ok(ResolvedUnaryOp {
+			expr: Box::new(expr),
+			op: unary.op,
+		});
+	}
+
 	fn resolve_call(&self, call: Call) -> anyhow::Result<ResolvedCall> {
 		let mut args = Vec::new();
 
@@ -82,13 +118,21 @@ impl<'a> Sema<'a> {
 				for scope in self.vars.iter().rev() {
 					for var in scope {
 						if var.name == ident {
-							return Ok(ResolvedExpr::Ident(ResolvedVarExpr { name: var.name.clone(), typ: var.typ }));
+							return Ok(ResolvedExpr::Ident(ResolvedVarExpr {
+								name: var.name.clone(),
+								typ: var.typ,
+							}));
 						}
 					}
 				}
 
 				return Err(anyhow!("invalid variable"));
 			}
+			Expr::BinOp(binary) => ResolvedExpr::BinaryOp(self.resolve_binary_operation(binary)?),
+			Expr::UnaryOp(unary) => ResolvedExpr::UnaryOp(self.resolve_unary_operation(unary)?),
+			Expr::Group(group) => ResolvedExpr::Group(ResolvedGroup {
+				expr: Box::new(self.resolve_expr(*group.expr)?),
+			}),
 		});
 	}
 
