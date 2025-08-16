@@ -13,6 +13,11 @@ impl From<ArgType> for CommandOptionType {
 	}
 }
 
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+pub enum Event {
+	Message,
+}
+
 #[derive(Deserialize, Debug)]
 pub struct Argument {
 	pub name: String,
@@ -33,9 +38,20 @@ pub struct Command {
 }
 
 #[derive(Deserialize, Debug)]
+pub struct OnEvent {
+	// pub name: String,
+	pub event: Event,
+	pub action: String,
+	// pub desc: String,
+	// pub args: Option<Vec<Argument>>,
+	// pub log: Option<bool>,
+}
+
+#[derive(Deserialize, Debug)]
 pub struct Config {
 	pub token: String,
 	pub command: Option<Vec<Command>>,
+	pub on_event: Option<Vec<OnEvent>>,
 }
 
 pub fn load_config(s: &str) -> anyhow::Result<Config> {

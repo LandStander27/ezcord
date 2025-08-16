@@ -120,6 +120,8 @@ fn parse_bin_op(input: &str) -> ParseResult<&str, Operation> {
 					value(BinOperation::Sub, char('-')),
 					value(BinOperation::Div, char('/')),
 					value(BinOperation::Mul, char('*')),
+					value(BinOperation::Equals, tag("==")),
+					value(BinOperation::NotEquals, tag("!=")),
 				)),
 				Operation::Binary,
 			),
@@ -214,7 +216,7 @@ fn parse_if_stmt(input: &str) -> ParseResult<&str, IfStmt> {
 	let res = cut(context("invalid condition", parse_expr)).parse(input)?;
 	let cond = res.1;
 
-	let res = cut(context(
+	let mut res = cut(context(
 		"invalid block",
 		delimited(
 			delimited(multispace0, char('{'), multispace0),
@@ -223,7 +225,24 @@ fn parse_if_stmt(input: &str) -> ParseResult<&str, IfStmt> {
 		),
 	))
 	.parse(res.0)?;
-	return Ok((res.0, IfStmt { cond, block: res.1 }));
+
+	let block = res.1;
+	let mut else_block = None;
+	if let Ok((rest, _)) = delimited(multispace0::<&str, VerboseError<&str>>, tag("else"), multispace0).parse(res.0) {
+		res = cut(context(
+			"invalid block",
+			delimited(
+				delimited(multispace0, char('{'), multispace0),
+				context("invalid statement", parse_multi_stmt),
+				delimited(multispace0, char('}'), multispace0),
+			),
+		))
+		.parse(rest)?;
+
+		else_block = Some(res.1);
+	}
+
+	return Ok((res.0, IfStmt { cond, block, else_block }));
 }
 
 fn parse_while_stmt(input: &str) -> ParseResult<&str, WhileStmt> {

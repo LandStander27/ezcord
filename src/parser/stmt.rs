@@ -20,6 +20,7 @@ pub struct VarSetStmt {
 pub struct IfStmt {
 	pub cond: Expr,
 	pub block: Vec<Stmt>,
+	pub else_block: Option<Vec<Stmt>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -20,6 +20,7 @@ pub struct ResolvedVarSet {
 pub struct ResolvedIfStmt {
 	pub cond: ResolvedExpr,
 	pub block: Vec<ResolvedStmt>,
+	pub else_block: Option<Vec<ResolvedStmt>>,
 }
 
 #[derive(Debug, Clone)]

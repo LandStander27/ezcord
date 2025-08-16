@@ -212,7 +212,13 @@ impl<'a> Sema<'a> {
 		}
 
 		let block = self.resolve_block(stmt.block)?;
-		return Ok(ResolvedIfStmt { cond, block });
+		let else_block = if let Some(s) = stmt.else_block {
+			Some(self.resolve_block(s)?)
+		} else {
+			None
+		};
+
+		return Ok(ResolvedIfStmt { cond, block, else_block });
 	}
 
 	fn resolve_while_stmt(&mut self, stmt: WhileStmt) -> anyhow::Result<ResolvedWhileStmt> {

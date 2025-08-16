@@ -10,6 +10,8 @@ impl Operation {
 			Operation::Binary(bin) => match bin {
 				BinOperation::Div | BinOperation::Mul => 6,
 				BinOperation::Add | BinOperation::Sub => 5,
+
+				BinOperation::NotEquals | BinOperation::Equals => 3,
 			},
 			Operation::Unary(unary) => match unary {
 				UnaryOperation::Not | UnaryOperation::Neg => 7,
@@ -30,6 +32,9 @@ pub enum BinOperation {
 	Sub,
 	Div,
 	Mul,
+
+	Equals,
+	NotEquals,
 }
 
 #[derive(Debug, Clone, PartialEq)]

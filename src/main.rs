@@ -4,8 +4,9 @@ use std::sync::Arc;
 use anyhow::Result;
 use clap::Parser;
 use sema::decl::ResolvedVarDecl;
-use sema::expr::{LiteralString, ResolvedExpr};
+use sema::expr::{LiteralNumber, LiteralString, ResolvedExpr};
 use sema::stmt::ResolvedStmt;
+use sema::types::Type;
 use tokio::signal::unix::{SignalKind, signal};
 use tracing_subscriber::field::MakeExt;
 
@@ -19,6 +20,7 @@ use serenity::prelude::*;
 use tracing::{debug, error, info, trace, warn};
 
 mod config;
+use config::Event as ConfigEvent;
 use config::*;
 
 mod actions;
@@ -47,6 +49,11 @@ pub struct ResolvedCommand {
 	log: bool,
 }
 
+pub struct ResolvedEvent {
+	statements: Vec<ResolvedStmt>,
+	event: ConfigEvent,
+}
+
 pub struct ShardManagerContainer;
 impl TypeMapKey for ShardManagerContainer {
 	type Value = Arc<ShardManager>;
@@ -60,6 +67,11 @@ impl TypeMapKey for ConfigContainer {
 pub struct CommandsContainer;
 impl TypeMapKey for CommandsContainer {
 	type Value = Arc<RwLock<HashMap<String, ResolvedCommand>>>;
+}
+
+pub struct EventsContainer;
+impl TypeMapKey for EventsContainer {
+	type Value = Arc<RwLock<Vec<ResolvedEvent>>>;
 }
 
 pub struct BuiltinFuncsContainer;
@@ -91,7 +103,7 @@ impl EventHandler for Handler {
 				.read()
 				.await;
 
-			let mut runner = RunnerContext::new(resolved_vars, &funcs, &command, &ctx, shard_manager.clone());
+			let mut runner = RunnerContext::new(resolved_vars, &funcs, Some(&command), &ctx, shard_manager.clone());
 
 			let mut start = None;
 			if commands[&command.data.name].log {
@@ -126,6 +138,8 @@ impl EventHandler for Handler {
 			Function::Respond(Respond::default()),
 			Function::Exit(Exit::default()),
 			Function::Time(Time::default()),
+			Function::SendMessage(SendMessage::default()),
+			Function::GetMessageContent(GetMessageContent::default()),
 		];
 		debug!("registering slash commands");
 		let mut commands = Vec::new();
@@ -133,6 +147,7 @@ impl EventHandler for Handler {
 			let data = ctx.data.read().await;
 			let config = data.get::<ConfigContainer>().unwrap();
 			let mut parsed_commands = data.get::<CommandsContainer>().unwrap().write().await;
+			let mut parsed_events = data.get::<EventsContainer>().unwrap().write().await;
 
 			for cmd in config.command.as_ref().unwrap_or(&vec![]).iter() {
 				debug!("creating '{}' command", cmd.name);
@@ -200,6 +215,60 @@ impl EventHandler for Handler {
 				commands.push(slash_command);
 			}
 
+			debug!("creating events");
+			for event in config.on_event.as_ref().unwrap_or(&vec![]).iter() {
+				let actions = match parser::parse(event.action.clone()) {
+					Ok(o) => o,
+					Err(e) => {
+						error!(
+							"{}{e}",
+							if e.to_string().contains('\n') {
+								"\n"
+							} else {
+								""
+							}
+						);
+						return;
+					}
+				};
+
+				let mut sema = sema::Sema::new(
+					&builtin_functions,
+					vec![
+						ResolvedVarDecl {
+							name: "message".into(),
+							typ: Type::Number,
+							init: None,
+						},
+						ResolvedVarDecl {
+							name: "channel".into(),
+							typ: Type::Number,
+							init: None,
+						},
+					],
+				);
+				let resolved = match sema.resolve(actions) {
+					Ok(o) => o,
+					Err(e) => {
+						error!(
+							"{}{e}",
+							if e.to_string().contains('\n') {
+								"\n"
+							} else {
+								""
+							}
+						);
+						return;
+					}
+				};
+
+				parsed_events.push(ResolvedEvent {
+					statements: resolved,
+					event: event.event,
+				});
+			}
+			debug!("created all events");
+
 			let mut builtin = data.get::<BuiltinFuncsContainer>().unwrap().write().await;
 			builtin.append(&mut builtin_functions);
 		}
@@ -207,12 +276,46 @@ impl EventHandler for Handler {
 		guild.set_commands(&ctx.http, commands).await.unwrap();
 	}
 
-	async fn message(&self, _ctx: Context, _msg: Message) {
-		// if msg.content == "stop bot" {
-		// 	let data = ctx.data.read().await;
-		// 	let shard_manager = data.get::<ShardManagerContainer>().unwrap();
-		// 	shard_manager.shutdown_all().await;
-		// }
+	async fn message(&self, ctx: Context, msg: Message) {
+		if msg.author.id == ctx.cache.current_user().id {
+			return;
+		}
+
+		let global_data = ctx.data.read().await;
+		let events = global_data.get::<EventsContainer>().unwrap().read().await;
+		let shard_manager = global_data.get::<ShardManagerContainer>().unwrap();
+		let funcs = global_data
+			.get::<BuiltinFuncsContainer>()
+			.unwrap()
+			.read()
+			.await;
+
+		let mut runner = RunnerContext::new(
+			vec![
+				RuntimeVar {
+					name: "message".into(),
+					value: ResolvedExpr::Number(LiteralNumber { number: msg.id.get() as i64 }),
+				},
+				RuntimeVar {
+					name: "channel".into(),
+					value: ResolvedExpr::Number(LiteralNumber {
+						number: msg.channel_id.get() as i64,
+					}),
+				},
+			],
+			&funcs,
+			None,
+			&ctx,
+			shard_manager.clone(),
+		);
+		for events in events.iter().filter(|x| x.event == ConfigEvent::Message) {
+			for stmt in events.statements.iter() {
+				if let Err(e) = runner.execute_stmt(stmt).await {
+					error!("{e}");
+					break;
+				}
+			}
+		}
 	}
 }
 
@@ -246,6 +349,7 @@ async fn main() -> Result<()> {
 		data.insert::<ShardManagerContainer>(client.shard_manager.clone());
 		data.insert::<ConfigContainer>(Arc::new(config));
 		data.insert::<CommandsContainer>(Arc::new(RwLock::new(HashMap::new())));
+		data.insert::<EventsContainer>(Arc::new(RwLock::new(Vec::new())));
 		data.insert::<BuiltinFuncsContainer>(Arc::new(RwLock::new(Vec::new())));
 	}
 

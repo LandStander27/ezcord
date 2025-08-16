@@ -2,7 +2,7 @@ use super::Type;
 use crate::parser::expr::*;
 use ezcord_derive::DynamicEnum;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LiteralString {
 	pub s: String,
 }
@@ -13,7 +13,7 @@ impl LiteralString {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FmtString {
 	pub fragments: Vec<ResolvedExpr>,
 }
@@ -24,7 +24,7 @@ impl FmtString {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LiteralNumber {
 	pub number: i64,
 }
@@ -35,7 +35,7 @@ impl LiteralNumber {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LiteralBool {
 	pub value: bool,
 }
@@ -46,7 +46,7 @@ impl LiteralBool {
 	}
 }
 
-#[derive(DynamicEnum, Debug, Clone)]
+#[derive(DynamicEnum, Debug, Clone, PartialEq)]
 #[call(pub fn get_type(&self) -> Type)]
 pub enum ResolvedExpr {
 	String(LiteralString),
@@ -60,7 +60,7 @@ pub enum ResolvedExpr {
 	Call(ResolvedCall),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedGroup {
 	pub expr: Box<ResolvedExpr>,
 }
@@ -71,7 +71,7 @@ impl ResolvedGroup {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedUnaryOp {
 	pub expr: Box<ResolvedExpr>,
 	pub op: Operation,
@@ -83,7 +83,7 @@ impl ResolvedUnaryOp {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedBinaryOp {
 	pub left: Box<ResolvedExpr>,
 	pub right: Box<ResolvedExpr>,
@@ -92,11 +92,17 @@ pub struct ResolvedBinaryOp {
 
 impl ResolvedBinaryOp {
 	fn get_type(&self) -> Type {
-		return self.left.get_type();
+		return match self.op {
+			Operation::Binary(ref binary) => match binary {
+				BinOperation::Equals | BinOperation::NotEquals => Type::Bool,
+				_ => self.left.get_type(),
+			},
+			Operation::Unary(_) => unreachable!(),
+		};
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedVarExpr {
 	pub name: String,
 	pub typ: Type,
@@ -108,7 +114,7 @@ impl ResolvedVarExpr {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedCall {
 	pub name: String,
 	pub args: Vec<ResolvedExpr>,
