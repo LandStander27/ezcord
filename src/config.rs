@@ -42,6 +42,7 @@ pub struct OnEvent {
 	// pub name: String,
 	pub event: Event,
 	pub action: String,
+	pub filter: Option<String>,
 	// pub desc: String,
 	// pub args: Option<Vec<Argument>>,
 	// pub log: Option<bool>,

@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use clap::Parser;
+use regex::Regex;
 use sema::decl::ResolvedVarDecl;
 use sema::expr::{LiteralNumber, LiteralString, ResolvedExpr};
 use sema::stmt::ResolvedStmt;
@@ -52,6 +53,7 @@ pub struct ResolvedCommand {
 pub struct ResolvedEvent {
 	statements: Vec<ResolvedStmt>,
 	event: ConfigEvent,
+	filter: Option<Regex>,
 }
 
 pub struct ShardManagerContainer;
@@ -217,6 +219,19 @@ impl EventHandler for Handler {
 
 			debug!("creating events");
 			for event in config.on_event.as_ref().unwrap_or(&vec![]).iter() {
+				let regex = if let Some(ref r) = event.filter {
+					let r = match Regex::new(r) {
+						Ok(o) => o,
+						Err(e) => {
+							error!("{e}");
+							return;
+						}
+					};
+					Some(r)
+				} else {
+					None
+				};
+
 				let actions = match parser::parse(event.action.clone()) {
 					Ok(o) => o,
 					Err(e) => {
@@ -265,6 +280,7 @@ impl EventHandler for Handler {
 				parsed_events.push(ResolvedEvent {
 					statements: resolved,
 					event: event.event,
+					filter: regex,
 				});
 			}
 			debug!("created all events");
@@ -308,8 +324,14 @@ impl EventHandler for Handler {
 			&ctx,
 			shard_manager.clone(),
 		);
-		for events in events.iter().filter(|x| x.event == ConfigEvent::Message) {
-			for stmt in events.statements.iter() {
+		for event in events.iter().filter(|x| x.event == ConfigEvent::Message) {
+			if let Some(ref filter) = event.filter {
+				if !filter.is_match(&msg.content) {
+					continue;
+				}
+			}
+
+			for stmt in event.statements.iter() {
 				if let Err(e) = runner.execute_stmt(stmt).await {
 					error!("{e}");
 					break;

@@ -23,6 +23,8 @@ serde = "1.0.219"
 nom = "8.0.0"
 nom-language = "0.1.0"
 chrono = "0.4.41"
+regex = "1.11.1"
+fastrand = "2.3.0"
 
 version = { path = "version" }
 ezcord_derive = { path = "ezcord-derive" }
