@@ -269,238 +269,105 @@ impl Function {
 	}
 }
 
-pub struct GetMessageContent {
-	args: Vec<ResolvedArgDecl>,
-}
-
-impl Default for GetMessageContent {
-	fn default() -> Self {
-		return Self {
-			args: vec![
-				ResolvedArgDecl {
-					name: "message_id".into(),
-					typ: Type::Number,
-				},
-				ResolvedArgDecl {
-					name: "channel_id".into(),
-					typ: Type::Number,
-				},
-			],
-		};
-	}
-}
-
-impl GetMessageContent {
-	fn name(&self) -> &str {
-		return "message_content";
-	}
-
-	fn get_type(&self) -> Type {
-		return Type::String;
-	}
-
-	fn args(&self) -> &Vec<ResolvedArgDecl> {
-		return &self.args;
-	}
-
-	async fn run(&self, args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, ctx: &Context, _shard_manager: &Arc<ShardManager>) -> Result<Option<ResolvedExpr>> {
-		let message_id = &force_downcast!(&args[0], Number).number;
-		let channel_id = &force_downcast!(&args[1], Number).number;
-
-		let msg = ctx
-			.http
-			.get_message(ChannelId::new(*channel_id as u64), MessageId::new(*message_id as u64))
-			.await?;
-
-		return Ok(Some(ResolvedExpr::String(LiteralString { s: msg.content })));
-	}
-}
-
-pub struct SendMessage {
-	args: Vec<ResolvedArgDecl>,
-}
-
-impl Default for SendMessage {
-	fn default() -> Self {
-		return Self {
-			args: vec![
-				ResolvedArgDecl {
-					name: "message".into(),
-					typ: Type::String,
-				},
-				ResolvedArgDecl {
-					name: "channel_id".into(),
-					typ: Type::Number,
-				},
-			],
-		};
-	}
-}
-
-impl SendMessage {
-	fn name(&self) -> &str {
-		return "send_message";
-	}
-
-	fn get_type(&self) -> Type {
-		return Type::Void;
-	}
-
-	fn args(&self) -> &Vec<ResolvedArgDecl> {
-		return &self.args;
-	}
-
-	async fn run(&self, args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, ctx: &Context, _shard_manager: &Arc<ShardManager>) -> Result<Option<ResolvedExpr>> {
-		let message = &force_downcast!(&args[0], String).s;
-		let channel_id = &force_downcast!(&args[1], Number).number;
-
-		let id = ChannelId::new(*channel_id as u64);
-		let new_message = CreateMessage::new().content(message);
-		id.send_message(&ctx.http, new_message).await?;
-
-		return Ok(None);
-	}
-}
-
-pub struct Delay {
-	args: Vec<ResolvedArgDecl>,
-}
-
-impl Default for Delay {
-	fn default() -> Self {
-		return Self {
-			args: vec![ResolvedArgDecl {
-				name: "ms".into(),
-				typ: Type::Number,
-			}],
-		};
-	}
-}
-
-impl Delay {
-	fn name(&self) -> &str {
-		return "delay";
-	}
-
-	fn get_type(&self) -> Type {
-		return Type::Void;
-	}
-
-	fn args(&self) -> &Vec<ResolvedArgDecl> {
-		return &self.args;
-	}
-
-	async fn run(&self, args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, _ctx: &Context, _shard_manager: &Arc<ShardManager>) -> Result<Option<ResolvedExpr>> {
-		if let ResolvedExpr::Number(LiteralNumber { number }) = args[0] {
-			tokio::time::sleep(std::time::Duration::from_millis(number as u64)).await;
+macro_rules! create_function {
+	($struct_name:ident: $func_name:ident($($arg_name:ident: $arg_type:tt),*) -> $ret_type:tt ($($arg_name2:ident: $arg_type2:ty),*)$block:block) => {
+		#[allow(unused)]
+		pub struct $struct_name {
+			args: Vec<ResolvedArgDecl>,
 		}
 
-		return Ok(None);
-	}
-}
-
-pub struct Respond {
-	args: Vec<ResolvedArgDecl>,
-}
-
-impl Default for Respond {
-	fn default() -> Self {
-		return Self {
-			args: vec![ResolvedArgDecl {
-				name: "message".into(),
-				typ: Type::String,
-			}],
-		};
-	}
-}
-
-impl Respond {
-	fn name(&self) -> &str {
-		return "respond";
-	}
-
-	fn get_type(&self) -> Type {
-		return Type::Void;
-	}
-
-	fn args(&self) -> &Vec<ResolvedArgDecl> {
-		return &self.args;
-	}
-
-	async fn run(&self, args: &[ResolvedExpr], command: &Option<&CommandInteraction>, ctx: &Context, _shard_manager: &Arc<ShardManager>) -> Result<Option<ResolvedExpr>> {
-		if command.is_none() {
-			return Err(anyhow!("respond can only be used in a slash-command"));
-		}
-
-		if let ResolvedExpr::String(LiteralString { s }) = &args[0] {
-			let data = CreateInteractionResponseMessage::new().content(s);
-			let builder = CreateInteractionResponse::Message(data);
-			if let Err(why) = command.unwrap().create_response(&ctx.http, builder).await {
-				error!("{why}");
+		impl Default for $struct_name {
+			fn default() -> Self {
+				return Self { args: vec![
+					$(
+						ResolvedArgDecl {
+							name: stringify!($arg_name).into(),
+							typ: Type::$arg_type
+						},
+					)*
+				] };
 			}
 		}
 
-		return Ok(None);
-	}
+		impl $struct_name {
+			#[allow(unused)]
+			fn name(&self) -> &str {
+				return stringify!($func_name);
+			}
+
+			#[allow(unused)]
+			fn get_type(&self) -> Type {
+				return Type::$ret_type;
+			}
+
+			#[allow(unused)]
+			fn args(&self) -> &Vec<ResolvedArgDecl> {
+				return &self.args;
+			}
+
+			async fn run(&self, $($arg_name2: $arg_type2),*) -> Result<Option<ResolvedExpr>> {
+				$block
+			}
+		}
+	};
 }
 
-pub struct Exit {
-	args: Vec<ResolvedArgDecl>,
-}
+create_function!(GetMessageContent: message_content(message_id: Number, channel_id: Number) -> String (args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, ctx: &Context, _shard_manager: &Arc<ShardManager>) {
+	let message_id = &force_downcast!(&args[0], Number).number;
+	let channel_id = &force_downcast!(&args[1], Number).number;
 
-impl Default for Exit {
-	fn default() -> Self {
-		return Self { args: vec![] };
-	}
-}
+	let msg = ctx
+		.http
+		.get_message(ChannelId::new(*channel_id as u64), MessageId::new(*message_id as u64))
+		.await?;
 
-impl Exit {
-	fn name(&self) -> &str {
-		return "exit";
-	}
+	return Ok(Some(ResolvedExpr::String(LiteralString { s: msg.content })));
+});
 
-	fn get_type(&self) -> Type {
-		return Type::Void;
-	}
+create_function!(SendMessage: send_message(message: Void, channel_id: Number) -> String (args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, ctx: &Context, _shard_manager: &Arc<ShardManager>) {
+	let message = &force_downcast!(&args[0], String).s;
+	let channel_id = &force_downcast!(&args[1], Number).number;
 
-	fn args(&self) -> &Vec<ResolvedArgDecl> {
-		return &self.args;
-	}
+	let id = ChannelId::new(*channel_id as u64);
+	let new_message = CreateMessage::new().content(message);
+	id.send_message(&ctx.http, new_message).await?;
 
-	async fn run(&self, _args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, _ctx: &Context, shard_manager: &Arc<ShardManager>) -> Result<Option<ResolvedExpr>> {
-		shard_manager.shutdown_all().await;
-		return Ok(None);
-	}
-}
+	return Ok(None);
+});
 
-pub struct Time {
-	args: Vec<ResolvedArgDecl>,
-}
-
-impl Default for Time {
-	fn default() -> Self {
-		return Self { args: vec![] };
-	}
-}
-
-impl Time {
-	fn name(&self) -> &str {
-		return "time";
+create_function!(Delay: delay(ms: Number) -> Void (args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, _ctx: &Context, _shard_manager: &Arc<ShardManager>) {
+	if let ResolvedExpr::Number(LiteralNumber { number }) = args[0] {
+		tokio::time::sleep(std::time::Duration::from_millis(number as u64)).await;
 	}
 
-	fn get_type(&self) -> Type {
-		return Type::String;
+	return Ok(None);
+});
+
+create_function!(Respond: respond(message: String) -> Void (args: &[ResolvedExpr], command: &Option<&CommandInteraction>, ctx: &Context, _shard_manager: &Arc<ShardManager>) {
+	if command.is_none() {
+		return Err(anyhow!("respond can only be used in a slash-command"));
 	}
 
-	fn args(&self) -> &Vec<ResolvedArgDecl> {
-		return &self.args;
+	if let ResolvedExpr::String(LiteralString { s }) = &args[0] {
+		let data = CreateInteractionResponseMessage::new().content(s);
+		let builder = CreateInteractionResponse::Message(data);
+		if let Err(why) = command.unwrap().create_response(&ctx.http, builder).await {
+			error!("{why}");
+		}
 	}
 
-	async fn run(&self, _args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, _ctx: &Context, _shard_manager: &Arc<ShardManager>) -> Result<Option<ResolvedExpr>> {
-		let now: DateTime<Local> = Local::now();
+	return Ok(None);
+});
 
-		return Ok(Some(ResolvedExpr::String(LiteralString {
-			s: now.format("%Y-%m-%d %H:%M:%S").to_string(),
-		})));
-	}
-}
+create_function!(Exit: exit() -> Void (_args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, _ctx: &Context, shard_manager: &Arc<ShardManager>) {
+	shard_manager.shutdown_all().await;
+	return Ok(None);
+});
+
+create_function!(Time: time() -> String (_args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, _ctx: &Context, _shard_manager: &Arc<ShardManager>) {
+	let now: DateTime<Local> = Local::now();
+
+	return Ok(Some(ResolvedExpr::String(LiteralString {
+		s: now.format("%Y-%m-%d %H:%M:%S").to_string(),
+	})));
+});
