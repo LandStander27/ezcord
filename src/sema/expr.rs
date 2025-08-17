@@ -68,7 +68,11 @@ pub struct ResolvedArray {
 
 impl ResolvedArray {
 	fn get_type(&self) -> Type {
-		return Type::Array;
+		if let Some(first) = self.elements.first() {
+			return Type::Array(Box::new(first.get_type()));
+		}
+
+		return Type::Array(Box::new(Type::Void));
 	}
 }
 
@@ -107,6 +111,12 @@ impl ResolvedBinaryOp {
 		return match self.op {
 			Operation::Binary(ref binary) => match binary {
 				BinOperation::Equals | BinOperation::NotEquals => Type::Bool,
+				BinOperation::Index => {
+					if let Type::Array(element_type) = self.left.get_type() {
+						return *element_type;
+					}
+					unreachable!()
+				}
 				_ => self.left.get_type(),
 			},
 			Operation::Unary(_) => unreachable!(),
@@ -122,7 +132,7 @@ pub struct ResolvedVarExpr {
 
 impl ResolvedVarExpr {
 	fn get_type(&self) -> Type {
-		return self.typ;
+		return self.typ.clone();
 	}
 }
 
@@ -135,6 +145,6 @@ pub struct ResolvedCall {
 
 impl ResolvedCall {
 	fn get_type(&self) -> Type {
-		return self.ret_type;
+		return self.ret_type.clone();
 	}
 }

@@ -29,7 +29,6 @@ enum Token {
 	Stmt(Stmt),
 	RBracket,
 	Comment,
-	// Unknown(&'a str),
 }
 
 fn parse_ident(input: &str) -> ParseResult<&str, String> {
@@ -121,38 +120,23 @@ fn parse_unary_op(input: &str) -> ParseResult<&str, Operation> {
 	.parse(input);
 }
 
-fn parse_post_op(input: &str) -> ParseResult<&str, Operation> {
+fn parse_binary_op(input: &str) -> ParseResult<&str, Operation> {
 	return context(
 		"invalid binop",
 		delimited(
 			multispace0,
-			alt((
-				map(
-					alt((
-						value(BinOperation::Add, char('+')),
-						value(BinOperation::Sub, char('-')),
-						value(BinOperation::Div, char('/')),
-						value(BinOperation::Mul, char('*')),
-						value(BinOperation::Equals, tag("==")),
-						value(BinOperation::NotEquals, tag("!=")),
-					)),
-					Operation::Binary,
-				),
-				map(
-					map(
-						map(
-							delimited(
-								delimited(multispace0, char('['), multispace0),
-								cut(context("invalid index", parse_expr)),
-								delimited(multispace0, cut(context("expected ']'", char(']'))), multispace0),
-							),
-							Box::new,
-						),
-						UnaryOperation::Index,
-					),
-					Operation::Unary,
-				),
-			)),
+			map(
+				alt((
+					value(BinOperation::Add, char('+')),
+					value(BinOperation::Sub, char('-')),
+					value(BinOperation::Div, char('/')),
+					value(BinOperation::Mul, char('*')),
+					value(BinOperation::Equals, tag("==")),
+					value(BinOperation::NotEquals, tag("!=")),
+					value(BinOperation::Index, char('[')),
+				)),
+				Operation::Binary,
+			),
 			multispace0,
 		),
 	)
@@ -161,7 +145,7 @@ fn parse_post_op(input: &str) -> ParseResult<&str, Operation> {
 
 fn parse_expr_rhs(mut input: &str, mut lhs: Expr, prec: i64) -> ParseResult<&str, Expr> {
 	loop {
-		let (rest, op) = match parse_post_op(input) {
+		let (rest, op) = match parse_binary_op(input) {
 			Ok(o) => o,
 			Err(_e) => return Ok((input, lhs)),
 		};
@@ -172,10 +156,14 @@ fn parse_expr_rhs(mut input: &str, mut lhs: Expr, prec: i64) -> ParseResult<&str
 		}
 		input = rest;
 
-		let (rest, mut right) = parse_expr_single(input)?;
+		let (rest, mut right) = if op == Operation::Binary(BinOperation::Index) {
+			delimited(multispace0, terminated(parse_expr, multispace0), terminated(char(']'), multispace0)).parse(input)?
+		} else {
+			parse_expr_single(input)?
+		};
 		input = rest;
 
-		match parse_post_op(input) {
+		match parse_binary_op(input) {
 			Ok(o) => {
 				if cur_op < o.1.prec() {
 					let (rest, rhs_expr) = parse_expr_rhs(input, right, cur_op + 1)?;

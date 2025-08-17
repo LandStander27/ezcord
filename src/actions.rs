@@ -21,6 +21,7 @@ pub struct RunnerContext<'a> {
 	shard_manager: Arc<ShardManager>,
 }
 
+#[macro_export]
 macro_rules! force_downcast {
 	($upper:expr, $pattern:tt) => {{
 		if let ResolvedExpr::$pattern(inner) = $upper {
@@ -60,7 +61,6 @@ impl<'a> RunnerContext<'a> {
 					UnaryOperation::Not => ResolvedExpr::Bool(LiteralBool {
 						value: !force_downcast!(expr, Bool).value,
 					}),
-					_ => todo!(),
 				}
 			}
 		});
@@ -87,6 +87,20 @@ impl<'a> RunnerContext<'a> {
 
 					BinOperation::Equals => ResolvedExpr::Bool(LiteralBool { value: left == right }),
 					BinOperation::NotEquals => ResolvedExpr::Bool(LiteralBool { value: left != right }),
+
+					BinOperation::Index => {
+						let arr = force_downcast!(left, Array);
+						let mut index = force_downcast!(right, Number).number;
+						if index < 0 {
+							index += arr.elements.len() as i64;
+						}
+
+						if arr.elements.len() as i64 >= index || index < 0 {
+							return Err(anyhow!("index out of bounds"));
+						}
+
+						arr.elements[index as usize].clone()
+					}
 				}
 			}
 			Operation::Unary(_) => unreachable!(),

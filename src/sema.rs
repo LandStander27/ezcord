@@ -40,8 +40,24 @@ impl<'a> Sema<'a> {
 		let left = self.resolve_expr(*binary.left)?;
 		let right = self.resolve_expr(*binary.right)?;
 
-		if left.get_type() != right.get_type() {
-			return Err(anyhow!("cannot do operation on '{}' and '{}'", left.get_type(), right.get_type()));
+		match binary.op {
+			Operation::Binary(ref binary) => match binary {
+				BinOperation::Index => {
+					if !matches!(left.get_type(), Type::Array(_)) {
+						return Err(anyhow!("cannot index into non-Array, got '{}'", left.get_type()));
+					}
+
+					if right.get_type() != Type::Number {
+						return Err(anyhow!("expected index to be '{}', got '{}'", Type::Number, right.get_type()));
+					}
+				}
+				_ => {
+					if left.get_type() != right.get_type() {
+						return Err(anyhow!("cannot do operation on '{}' and '{}'", left.get_type(), right.get_type()));
+					}
+				}
+			},
+			_ => unreachable!(),
 		}
 
 		return Ok(ResolvedBinaryOp {
@@ -58,7 +74,6 @@ impl<'a> Sema<'a> {
 			Operation::Unary(ref unary) => match unary {
 				UnaryOperation::Neg => Type::Number,
 				UnaryOperation::Not => Type::Bool,
-				_ => todo!(),
 			},
 			_ => unreachable!(),
 		};
@@ -121,7 +136,7 @@ impl<'a> Sema<'a> {
 						if var.name == ident {
 							return Ok(ResolvedExpr::Ident(ResolvedVarExpr {
 								name: var.name.clone(),
-								typ: var.typ,
+								typ: var.typ.clone(),
 							}));
 						}
 					}
@@ -136,12 +151,24 @@ impl<'a> Sema<'a> {
 			}),
 			Expr::Array(array) => {
 				let mut elements = Vec::new();
+				let mut element_type = None;
 				for i in array.elements {
-					elements.push(self.resolve_expr(i)?);
+					let element = self.resolve_expr(i)?;
+					if let Some(ref element_type) = element_type {
+						if element_type != &element.get_type() {
+							return Err(anyhow!(
+								"all elements of array must be of same type; expected '{}', got '{}'",
+								element_type,
+								element.get_type()
+							));
+						}
+					} else {
+						element_type = Some(element.get_type());
+					}
+					elements.push(element);
 				}
 				ResolvedExpr::Array(ResolvedArray { elements })
 			}
-			_ => todo!(),
 		});
 	}
 

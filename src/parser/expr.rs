@@ -8,6 +8,7 @@ impl Operation {
 	pub fn prec(&self) -> i64 {
 		match self {
 			Operation::Binary(bin) => match bin {
+				BinOperation::Index => 8,
 				BinOperation::Div | BinOperation::Mul => 6,
 				BinOperation::Add | BinOperation::Sub => 5,
 
@@ -15,8 +16,6 @@ impl Operation {
 			},
 			Operation::Unary(unary) => match unary {
 				UnaryOperation::Not | UnaryOperation::Neg => 7,
-
-				UnaryOperation::Index(_) => 8,
 			},
 		}
 	}
@@ -26,8 +25,6 @@ impl Operation {
 pub enum UnaryOperation {
 	Not,
 	Neg,
-
-	Index(Box<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -39,6 +36,8 @@ pub enum BinOperation {
 
 	Equals,
 	NotEquals,
+
+	Index,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -47,8 +46,6 @@ pub enum Expr {
 	Number(i64),
 	Bool(bool),
 	Array(Array),
-	#[allow(unused)]
-	Index(Index),
 	BinOp(BinOp),
 	UnaryOp(UnaryOp),
 	Group(Group),
