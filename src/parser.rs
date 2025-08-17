@@ -67,6 +67,17 @@ fn parse_group(input: &str) -> ParseResult<&str, Group> {
 	.parse(input);
 }
 
+fn parse_array(input: &str) -> ParseResult<&str, Array> {
+	let res = delimited(
+		terminated(char('['), multispace0),
+		cut(context("invalid array", separated_list0(delimited(multispace0, char(','), multispace0), parse_expr))),
+		delimited(multispace0, cut(context("expected ']'", char(']'))), multispace0),
+	)
+	.parse(input)?;
+
+	return Ok((res.0, Array { elements: res.1 }));
+}
+
 fn parse_expr(input: &str) -> ParseResult<&str, Expr> {
 	let left = parse_expr_single(input)?;
 	return parse_expr_rhs(left.0, left.1, 0);
@@ -76,6 +87,7 @@ fn parse_postfix(input: &str) -> ParseResult<&str, Expr> {
 	return delimited(
 		multispace0,
 		alt((
+			map(parse_array, Expr::Array),
 			map(parse_group, Expr::Group),
 			map(strings::parse_string, Expr::String),
 			map(parse_number, Expr::Number),
@@ -109,22 +121,38 @@ fn parse_unary_op(input: &str) -> ParseResult<&str, Operation> {
 	.parse(input);
 }
 
-fn parse_bin_op(input: &str) -> ParseResult<&str, Operation> {
+fn parse_post_op(input: &str) -> ParseResult<&str, Operation> {
 	return context(
 		"invalid binop",
 		delimited(
 			multispace0,
-			map(
-				alt((
-					value(BinOperation::Add, char('+')),
-					value(BinOperation::Sub, char('-')),
-					value(BinOperation::Div, char('/')),
-					value(BinOperation::Mul, char('*')),
-					value(BinOperation::Equals, tag("==")),
-					value(BinOperation::NotEquals, tag("!=")),
-				)),
-				Operation::Binary,
-			),
+			alt((
+				map(
+					alt((
+						value(BinOperation::Add, char('+')),
+						value(BinOperation::Sub, char('-')),
+						value(BinOperation::Div, char('/')),
+						value(BinOperation::Mul, char('*')),
+						value(BinOperation::Equals, tag("==")),
+						value(BinOperation::NotEquals, tag("!=")),
+					)),
+					Operation::Binary,
+				),
+				map(
+					map(
+						map(
+							delimited(
+								delimited(multispace0, char('['), multispace0),
+								cut(context("invalid index", parse_expr)),
+								delimited(multispace0, cut(context("expected ']'", char(']'))), multispace0),
+							),
+							Box::new,
+						),
+						UnaryOperation::Index,
+					),
+					Operation::Unary,
+				),
+			)),
 			multispace0,
 		),
 	)
@@ -133,7 +161,7 @@ fn parse_bin_op(input: &str) -> ParseResult<&str, Operation> {
 
 fn parse_expr_rhs(mut input: &str, mut lhs: Expr, prec: i64) -> ParseResult<&str, Expr> {
 	loop {
-		let (rest, op) = match parse_bin_op(input) {
+		let (rest, op) = match parse_post_op(input) {
 			Ok(o) => o,
 			Err(_e) => return Ok((input, lhs)),
 		};
@@ -147,7 +175,7 @@ fn parse_expr_rhs(mut input: &str, mut lhs: Expr, prec: i64) -> ParseResult<&str
 		let (rest, mut right) = parse_expr_single(input)?;
 		input = rest;
 
-		match parse_bin_op(input) {
+		match parse_post_op(input) {
 			Ok(o) => {
 				if cur_op < o.1.prec() {
 					let (rest, rhs_expr) = parse_expr_rhs(input, right, cur_op + 1)?;

@@ -5,6 +5,7 @@ pub enum Type {
 	String,
 	Number,
 	Bool,
+	Array,
 	Void,
 }
 
@@ -15,6 +16,7 @@ impl std::fmt::Display for Type {
 			Self::Number => "Number",
 			Self::String => "String",
 			Self::Bool => "Boolean",
+			Self::Array => "Array",
 		});
 	}
 }

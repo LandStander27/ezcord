@@ -15,6 +15,8 @@ impl Operation {
 			},
 			Operation::Unary(unary) => match unary {
 				UnaryOperation::Not | UnaryOperation::Neg => 7,
+
+				UnaryOperation::Index(_) => 8,
 			},
 		}
 	}
@@ -24,6 +26,8 @@ impl Operation {
 pub enum UnaryOperation {
 	Not,
 	Neg,
+
+	Index(Box<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -42,11 +46,25 @@ pub enum Expr {
 	String(LitOrFmtString),
 	Number(i64),
 	Bool(bool),
+	Array(Array),
+	#[allow(unused)]
+	Index(Index),
 	BinOp(BinOp),
 	UnaryOp(UnaryOp),
 	Group(Group),
 	Ident(String),
 	Call(Call),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Index {
+	pub array: Box<Expr>,
+	pub index: Box<Expr>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Array {
+	pub elements: Vec<Expr>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

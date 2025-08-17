@@ -58,6 +58,7 @@ impl<'a> Sema<'a> {
 			Operation::Unary(ref unary) => match unary {
 				UnaryOperation::Neg => Type::Number,
 				UnaryOperation::Not => Type::Bool,
+				_ => todo!(),
 			},
 			_ => unreachable!(),
 		};
@@ -133,6 +134,14 @@ impl<'a> Sema<'a> {
 			Expr::Group(group) => ResolvedExpr::Group(ResolvedGroup {
 				expr: Box::new(self.resolve_expr(*group.expr)?),
 			}),
+			Expr::Array(array) => {
+				let mut elements = Vec::new();
+				for i in array.elements {
+					elements.push(self.resolve_expr(i)?);
+				}
+				ResolvedExpr::Array(ResolvedArray { elements })
+			}
+			_ => todo!(),
 		});
 	}
 

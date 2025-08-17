@@ -53,11 +53,23 @@ pub enum ResolvedExpr {
 	FmtString(FmtString),
 	Number(LiteralNumber),
 	Bool(LiteralBool),
+	Array(ResolvedArray),
 	Ident(ResolvedVarExpr),
 	Group(ResolvedGroup),
 	UnaryOp(ResolvedUnaryOp),
 	BinaryOp(ResolvedBinaryOp),
 	Call(ResolvedCall),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedArray {
+	pub elements: Vec<ResolvedExpr>,
+}
+
+impl ResolvedArray {
+	fn get_type(&self) -> Type {
+		return Type::Array;
+	}
 }
 
 #[derive(Debug, Clone, PartialEq)]

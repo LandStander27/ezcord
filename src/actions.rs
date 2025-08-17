@@ -60,6 +60,7 @@ impl<'a> RunnerContext<'a> {
 					UnaryOperation::Not => ResolvedExpr::Bool(LiteralBool {
 						value: !force_downcast!(expr, Bool).value,
 					}),
+					_ => todo!(),
 				}
 			}
 		});

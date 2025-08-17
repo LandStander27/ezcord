@@ -8,7 +8,7 @@ impl From<ArgType> for CommandOptionType {
 			ArgType::Number => CommandOptionType::Integer,
 			ArgType::String => CommandOptionType::String,
 			ArgType::Bool => CommandOptionType::Boolean,
-			ArgType::Void => panic!("argument type cannot be 'void'"),
+			_ => panic!("invalid argument type"),
 		};
 	}
 }
