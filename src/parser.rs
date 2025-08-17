@@ -182,8 +182,54 @@ fn parse_expr_rhs(mut input: &str, mut lhs: Expr, prec: i64) -> ParseResult<&str
 	}
 }
 
+// fn parse_type(input: &str) -> ParseResult<&str, Type> {
+// 	return alt((
+// 		value(Type::Bool, tag("bool")),
+// 		value(Type::String, tag("string")),
+// 		value(Type::Number, tag("number")),
+// 		value(Type::Void, tag("void")),
+// 		map(
+// 			map(preceded(tag("[]"), cut(context("expected element type for array after '[]'", parse_type))), Box::new),
+// 			Type::Array,
+// 		),
+// 	))
+// 	.parse(input);
+// }
+
+// fn parse_arg_decl(input: &str) -> ParseResult<&str, ArgDecl> {
+// 	let (input, ident) = delimited(multispace0, parse_ident, delimited(multispace0, char(':'), multispace0)).parse(input)?;
+// 	let (input, typ) = terminated(parse_type, multispace0).parse(input)?;
+// 	return Ok((input, ArgDecl { ident, typ }));
+// }
+
+// fn parse_fn_decl(input: &str) -> ParseResult<&str, FnDecl> {
+// 	let (input, _) = terminated(tag("fn"), multispace1).parse(input)?;
+// 	let (input, ident) = cut(context("invalid function identifier", terminated(parse_ident, multispace0))).parse(input)?;
+// 	let (input, args) = delimited(
+// 		cut(context("expected (", char('('))),
+// 		cut(separated_list0(char(','), parse_arg_decl)),
+// 		cut(context("expected ')'", char(')'))),
+// 	)
+// 	.parse(input)?;
+
+// 	let (input, _) = delimited(multispace0, tag("->"), multispace0).parse(input)?;
+// 	let (input, ret_type) = terminated(parse_type, multispace0).parse(input)?;
+
+// 	let (input, body) = cut(context(
+// 		"invalid block",
+// 		delimited(
+// 			delimited(multispace0, char('{'), multispace0),
+// 			context("invalid statement", parse_multi_stmt),
+// 			delimited(multispace0, char('}'), multispace0),
+// 		),
+// 	))
+// 	.parse(input)?;
+
+// 	return Ok((input, FnDecl { ident, ret_type, args, body }));
+// }
+
 fn parse_decl(input: &str) -> ParseResult<&str, Decl> {
-	return delimited(multispace0, alt((map(parse_var_decl, Decl::VarDecl),)), multispace0).parse(input);
+	return delimited(multispace0, alt((map(parse_var_decl, Decl::Var),)), multispace0).parse(input);
 }
 
 fn func(input: &str) -> ParseResult<&str, Call> {

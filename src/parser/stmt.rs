@@ -1,5 +1,4 @@
 use super::Expr;
-// use crate::sema::types::Type;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
@@ -31,7 +30,7 @@ pub struct WhileStmt {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Decl {
-	VarDecl(VarDecl),
+	Var(VarDecl),
 }
 
 #[derive(Debug, Clone, PartialEq)]

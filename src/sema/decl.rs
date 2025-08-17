@@ -1,30 +1,25 @@
 use super::ResolvedExpr;
 use super::Type;
-// use ezcord_derive::DynamicEnum;
+use ezcord_derive::DynamicEnum;
 
-#[derive(Debug, Clone)]
-// #[call(fn get_name(&self) -> &str)]
-// #[call(fn get_type(&self) -> &Type)]
+#[derive(DynamicEnum, Debug, Clone)]
+#[call(pub fn get_name(&self) -> &str)]
 pub enum ResolvedDecl {
-	// Param(ResolvedParamDecl),
 	Var(ResolvedVarDecl),
 }
 
 #[derive(Debug, Clone)]
-pub struct ResolvedParamDecl {
+pub struct ResolvedArgDecl {
 	pub name: String,
 	pub typ: Type,
 }
 
-// impl ResolvedParamDecl {
-// 	fn get_name(&self) -> &str {
-// 		return &self.name;
-// 	}
-
-// 	fn get_type(&self) -> &Type {
-// 		return &self.typ;
-// 	}
-// }
+impl ResolvedArgDecl {
+	#[allow(unused)]
+	fn get_name(&self) -> &str {
+		return &self.name;
+	}
+}
 
 #[derive(Debug, Clone)]
 pub struct ResolvedVarDecl {
@@ -33,12 +28,8 @@ pub struct ResolvedVarDecl {
 	pub init: Option<ResolvedExpr>,
 }
 
-// impl ResolvedVarDecl {
-// 	fn get_name(&self) -> &str {
-// 		return &self.name;
-// 	}
-
-// 	fn get_type(&self) -> &Type {
-// 		return &self.typ;
-// 	}
-// }
+impl ResolvedVarDecl {
+	fn get_name(&self) -> &str {
+		return &self.name;
+	}
+}

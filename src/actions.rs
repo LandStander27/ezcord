@@ -15,7 +15,7 @@ pub struct RuntimeVar {
 
 pub struct RunnerContext<'a> {
 	vars: Vec<Vec<RuntimeVar>>,
-	functions: &'a Vec<Function>,
+	builtin_functions: &'a Vec<Function>,
 	interaction: Option<&'a CommandInteraction>,
 	ctx: &'a Context,
 	shard_manager: Arc<ShardManager>,
@@ -42,14 +42,14 @@ impl<'a> RunnerContext<'a> {
 	) -> Self {
 		return Self {
 			vars: vec![input_vars, Vec::new()],
-			functions,
+			builtin_functions: functions,
 			interaction,
 			ctx,
 			shard_manager,
 		};
 	}
 
-	async fn calculate_unary_operation(&self, unary: &ResolvedUnaryOp) -> Result<ResolvedExpr> {
+	async fn calculate_unary_operation(&mut self, unary: &ResolvedUnaryOp) -> Result<ResolvedExpr> {
 		return Ok(match unary.op {
 			Operation::Binary(_) => unreachable!(),
 			Operation::Unary(ref op) => {
@@ -66,7 +66,7 @@ impl<'a> RunnerContext<'a> {
 		});
 	}
 
-	async fn calculate_binary_operation(&self, binary: &ResolvedBinaryOp) -> Result<ResolvedExpr> {
+	async fn calculate_binary_operation(&mut self, binary: &ResolvedBinaryOp) -> Result<ResolvedExpr> {
 		return Ok(match binary.op {
 			Operation::Binary(ref op) => {
 				let left = self.execute_expr(binary.left.as_ref()).await?.unwrap();
@@ -107,10 +107,10 @@ impl<'a> RunnerContext<'a> {
 		});
 	}
 
-	async fn execute_expr(&self, expr: &ResolvedExpr) -> Result<Option<ResolvedExpr>> {
+	async fn execute_expr(&mut self, expr: &ResolvedExpr) -> Result<Option<ResolvedExpr>> {
 		match expr {
 			ResolvedExpr::Call(func) => {
-				for builtin in self.functions.iter() {
+				for builtin in self.builtin_functions.iter() {
 					if builtin.name() == func.name.as_str() {
 						return self.run(builtin, &func.args).await;
 					}
@@ -225,7 +225,7 @@ impl<'a> RunnerContext<'a> {
 		return Ok(());
 	}
 
-	async fn run(&self, function: &Function, args: &[ResolvedExpr]) -> Result<Option<ResolvedExpr>> {
+	async fn run(&mut self, function: &Function, args: &[ResolvedExpr]) -> Result<Option<ResolvedExpr>> {
 		let mut converted_args = Vec::with_capacity(args.len());
 		for arg in args {
 			match Box::pin(self.execute_expr(arg)).await? {
@@ -242,7 +242,7 @@ impl<'a> RunnerContext<'a> {
 
 #[derive(DynamicEnum)]
 #[call(pub fn get_type(&self) -> Type)]
-#[call(pub fn args(&self) -> &Vec<ResolvedParamDecl>)]
+#[call(pub fn args(&self) -> &Vec<ResolvedArgDecl>)]
 #[call(pub fn name(&self) -> &str)]
 #[call(async fn run(&self, args: &[ResolvedExpr], command: &Option<&CommandInteraction>, ctx: &Context, shard_manager: &Arc<ShardManager>) -> Result<Option<ResolvedExpr>>)]
 pub enum Function {
@@ -270,18 +270,18 @@ impl Function {
 }
 
 pub struct GetMessageContent {
-	args: Vec<ResolvedParamDecl>,
+	args: Vec<ResolvedArgDecl>,
 }
 
 impl Default for GetMessageContent {
 	fn default() -> Self {
 		return Self {
 			args: vec![
-				ResolvedParamDecl {
+				ResolvedArgDecl {
 					name: "message_id".into(),
 					typ: Type::Number,
 				},
-				ResolvedParamDecl {
+				ResolvedArgDecl {
 					name: "channel_id".into(),
 					typ: Type::Number,
 				},
@@ -299,7 +299,7 @@ impl GetMessageContent {
 		return Type::String;
 	}
 
-	fn args(&self) -> &Vec<ResolvedParamDecl> {
+	fn args(&self) -> &Vec<ResolvedArgDecl> {
 		return &self.args;
 	}
 
@@ -317,18 +317,18 @@ impl GetMessageContent {
 }
 
 pub struct SendMessage {
-	args: Vec<ResolvedParamDecl>,
+	args: Vec<ResolvedArgDecl>,
 }
 
 impl Default for SendMessage {
 	fn default() -> Self {
 		return Self {
 			args: vec![
-				ResolvedParamDecl {
+				ResolvedArgDecl {
 					name: "message".into(),
 					typ: Type::String,
 				},
-				ResolvedParamDecl {
+				ResolvedArgDecl {
 					name: "channel_id".into(),
 					typ: Type::Number,
 				},
@@ -346,7 +346,7 @@ impl SendMessage {
 		return Type::Void;
 	}
 
-	fn args(&self) -> &Vec<ResolvedParamDecl> {
+	fn args(&self) -> &Vec<ResolvedArgDecl> {
 		return &self.args;
 	}
 
@@ -363,13 +363,13 @@ impl SendMessage {
 }
 
 pub struct Delay {
-	args: Vec<ResolvedParamDecl>,
+	args: Vec<ResolvedArgDecl>,
 }
 
 impl Default for Delay {
 	fn default() -> Self {
 		return Self {
-			args: vec![ResolvedParamDecl {
+			args: vec![ResolvedArgDecl {
 				name: "ms".into(),
 				typ: Type::Number,
 			}],
@@ -386,7 +386,7 @@ impl Delay {
 		return Type::Void;
 	}
 
-	fn args(&self) -> &Vec<ResolvedParamDecl> {
+	fn args(&self) -> &Vec<ResolvedArgDecl> {
 		return &self.args;
 	}
 
@@ -400,13 +400,13 @@ impl Delay {
 }
 
 pub struct Respond {
-	args: Vec<ResolvedParamDecl>,
+	args: Vec<ResolvedArgDecl>,
 }
 
 impl Default for Respond {
 	fn default() -> Self {
 		return Self {
-			args: vec![ResolvedParamDecl {
+			args: vec![ResolvedArgDecl {
 				name: "message".into(),
 				typ: Type::String,
 			}],
@@ -423,7 +423,7 @@ impl Respond {
 		return Type::Void;
 	}
 
-	fn args(&self) -> &Vec<ResolvedParamDecl> {
+	fn args(&self) -> &Vec<ResolvedArgDecl> {
 		return &self.args;
 	}
 
@@ -445,7 +445,7 @@ impl Respond {
 }
 
 pub struct Exit {
-	args: Vec<ResolvedParamDecl>,
+	args: Vec<ResolvedArgDecl>,
 }
 
 impl Default for Exit {
@@ -463,7 +463,7 @@ impl Exit {
 		return Type::Void;
 	}
 
-	fn args(&self) -> &Vec<ResolvedParamDecl> {
+	fn args(&self) -> &Vec<ResolvedArgDecl> {
 		return &self.args;
 	}
 
@@ -474,7 +474,7 @@ impl Exit {
 }
 
 pub struct Time {
-	args: Vec<ResolvedParamDecl>,
+	args: Vec<ResolvedArgDecl>,
 }
 
 impl Default for Time {
@@ -492,7 +492,7 @@ impl Time {
 		return Type::String;
 	}
 
-	fn args(&self) -> &Vec<ResolvedParamDecl> {
+	fn args(&self) -> &Vec<ResolvedArgDecl> {
 		return &self.args;
 	}
 

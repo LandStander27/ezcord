@@ -18,15 +18,37 @@ use types::*;
 
 pub struct Sema<'a> {
 	functions: &'a Vec<Function>,
-	vars: Vec<Vec<ResolvedVarDecl>>,
+	decls: Vec<Vec<ResolvedDecl>>,
+}
+
+macro_rules! get_decl {
+	($self:expr, $ident:expr, $type:tt) => {
+		'body: {
+			for scope in $self.decls.iter().rev() {
+				for var in scope {
+					if var.get_name() == $ident {
+						#[allow(irrefutable_let_patterns)]
+						if let ResolvedDecl::$type(inner) = var {
+							break 'body Some(inner);
+						}
+					}
+				}
+			}
+
+			break 'body None;
+		}
+	};
 }
 
 impl<'a> Sema<'a> {
 	pub fn new(functions: &'a Vec<Function>, vars: Vec<ResolvedVarDecl>) -> Self {
-		return Self { functions, vars: vec![vars] };
+		return Self {
+			functions,
+			decls: vec![vars.into_iter().map(ResolvedDecl::Var).collect()],
+		};
 	}
 
-	fn get_function(&self, ident: &str) -> anyhow::Result<&Function> {
+	fn get_builtin_function(&self, ident: &str) -> anyhow::Result<&Function> {
 		for func in self.functions {
 			if func.name() == ident {
 				return Ok(func);
@@ -91,7 +113,7 @@ impl<'a> Sema<'a> {
 	fn resolve_call(&self, call: Call) -> anyhow::Result<ResolvedCall> {
 		let mut args = Vec::new();
 
-		let func = self.get_function(&call.name)?;
+		let func = self.get_builtin_function(&call.name)?;
 		if func.args().len() != call.args.len() {
 			return Err(anyhow!("invalid number of arguments; function signature: {}", func.signature()));
 		}
@@ -131,15 +153,11 @@ impl<'a> Sema<'a> {
 			Expr::Bool(value) => ResolvedExpr::Bool(LiteralBool { value }),
 			Expr::String(s) => self.resolve_str(s)?,
 			Expr::Ident(ident) => {
-				for scope in self.vars.iter().rev() {
-					for var in scope {
-						if var.name == ident {
-							return Ok(ResolvedExpr::Ident(ResolvedVarExpr {
-								name: var.name.clone(),
-								typ: var.typ.clone(),
-							}));
-						}
-					}
+				if let Some(var) = get_decl!(self, ident, Var) {
+					return Ok(ResolvedExpr::Ident(ResolvedVarExpr {
+						name: var.name.clone(),
+						typ: var.typ.clone(),
+					}));
 				}
 
 				return Err(anyhow!("invalid variable"));
@@ -174,15 +192,15 @@ impl<'a> Sema<'a> {
 
 	fn resolve_decl(&mut self, decl: Decl) -> anyhow::Result<ResolvedDecl> {
 		return Ok(match decl {
-			Decl::VarDecl(var) => {
+			Decl::Var(var) => {
 				let i = self
-					.vars
+					.decls
 					.last()
 					.unwrap()
 					.iter()
-					.position(|x| x.name == var.ident);
+					.position(|x| x.get_name() == var.ident);
 				if let Some(i) = i {
-					self.vars.swap_remove(i);
+					self.decls.swap_remove(i);
 				}
 
 				let expr = self.resolve_expr(var.init)?;
@@ -192,12 +210,36 @@ impl<'a> Sema<'a> {
 					typ: expr.get_type(),
 					init: Some(expr),
 				})
-			}
+			} // Decl::Fn(func) => {
+			  // 	let i = self
+			  // 		.decls
+			  // 		.last()
+			  // 		.unwrap()
+			  // 		.iter()
+			  // 		.position(|x| x.get_name() == func.ident);
+			  // 	if let Some(i) = i {
+			  // 		self.decls.swap_remove(i);
+			  // 	}
+
+			  // 	let args = func
+			  // 		.args
+			  // 		.into_iter()
+			  // 		.map(|x| ResolvedArgDecl { name: x.ident, typ: x.typ })
+			  // 		.collect();
+			  // 	let body = self.resolve_block(func.body)?;
+
+			  // 	ResolvedDecl::Fn(ResolvedFnDecl {
+			  // 		ident: func.ident,
+			  // 		ret_type: func.ret_type,
+			  // 		args,
+			  // 		body,
+			  // 	})
+			  // }
 		});
 	}
 
 	fn resolve_block(&mut self, block: Vec<Stmt>) -> anyhow::Result<Vec<ResolvedStmt>> {
-		self.vars.push(Vec::new());
+		self.decls.push(Vec::new());
 		let mut resolved_stmts = Vec::new();
 
 		for stmt in block {
@@ -205,22 +247,13 @@ impl<'a> Sema<'a> {
 				Stmt::Expr(expr) => resolved_stmts.push(ResolvedStmt::Expr(self.resolve_expr(expr)?)),
 				Stmt::Decl(decl) => {
 					let decl = self.resolve_decl(decl)?;
-					let ResolvedDecl::Var(ref var) = decl;
-					self.vars.last_mut().unwrap().push(var.clone());
+					self.decls.last_mut().unwrap().push(decl.clone());
 					resolved_stmts.push(ResolvedStmt::Decl(decl));
 				}
 				Stmt::If(if_stmt) => resolved_stmts.push(ResolvedStmt::If(self.resolve_if_stmt(if_stmt)?)),
 				Stmt::While(while_stmt) => resolved_stmts.push(ResolvedStmt::While(self.resolve_while_stmt(while_stmt)?)),
 				Stmt::VarSet(var) => {
-					let mut selected_var = None;
-					for scope in self.vars.iter().rev() {
-						for i in scope {
-							if i.name == var.ident {
-								selected_var = Some(i);
-							}
-						}
-					}
-
+					let selected_var = get_decl!(self, var.ident, Var);
 					if let Some(selected_var) = selected_var {
 						let expr = self.resolve_expr(var.expr)?;
 						if expr.get_type() != selected_var.typ {
@@ -237,7 +270,7 @@ impl<'a> Sema<'a> {
 			dbg!(resolved_stmts.last().unwrap());
 		}
 
-		self.vars.pop();
+		self.decls.pop();
 		return Ok(resolved_stmts);
 	}
 
