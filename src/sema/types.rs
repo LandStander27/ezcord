@@ -6,7 +6,24 @@ pub enum Type {
 	Number,
 	Bool,
 	Array(Box<Type>),
+	Any,
 	Void,
+}
+
+impl Type {
+	pub fn is_same(&self, other: &Type) -> bool {
+		if self == &Type::Any || other == &Type::Any {
+			return true;
+		} else if let Type::Array(inner) = self {
+			if let Type::Array(other_inner) = other {
+				return inner.is_same(other_inner);
+			} else {
+				return false;
+			}
+		} else {
+			return self == other;
+		}
+	}
 }
 
 impl std::fmt::Display for Type {
@@ -17,6 +34,7 @@ impl std::fmt::Display for Type {
 			Self::String => "String".into(),
 			Self::Bool => "Boolean".into(),
 			Self::Array(inner) => format!("Array[{inner}]"),
+			Self::Any => "Any".into(),
 		});
 	}
 }

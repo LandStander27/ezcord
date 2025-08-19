@@ -26,7 +26,7 @@ impl FmtString {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LiteralNumber {
-	pub number: i64,
+	pub number: f64,
 }
 
 impl LiteralNumber {

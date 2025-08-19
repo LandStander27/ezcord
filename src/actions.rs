@@ -91,12 +91,14 @@ impl<'a> RunnerContext<'a> {
 					BinOperation::Index => {
 						let arr = force_downcast!(left, Array);
 						let mut index = force_downcast!(right, Number).number;
-						if index < 0 {
-							index += arr.elements.len() as i64;
+						if index < 0.0 {
+							index += arr.elements.len() as f64;
 						}
 
-						if arr.elements.len() as i64 >= index || index < 0 {
+						if arr.elements.len() as f64 >= index || index < 0.0 {
 							return Err(anyhow!("index out of bounds"));
+						} else if index.floor() != index {
+							return Err(anyhow!("index must be a positive integer"));
 						}
 
 						arr.elements[index as usize].clone()
@@ -252,6 +254,8 @@ pub enum Function {
 	Time(Time),
 	SendMessage(SendMessage),
 	GetMessageContent(GetMessageContent),
+	GetRandNumber(GetRandNumber),
+	GetArrayLength(GetArrayLength),
 }
 
 impl Function {
@@ -269,8 +273,9 @@ impl Function {
 	}
 }
 
+#[macro_export]
 macro_rules! create_function {
-	($struct_name:ident: $func_name:ident($($arg_name:ident: $arg_type:tt),*) -> $ret_type:tt ($($arg_name2:ident: $arg_type2:ty),*)$block:block) => {
+	($struct_name:ident: $func_name:ident($($arg_name:ident: $arg_type:expr),*) -> $ret_type:tt ($($arg_name2:ident: $arg_type2:ty),*)$block:block) => {
 		#[allow(unused)]
 		pub struct $struct_name {
 			args: Vec<ResolvedArgDecl>,
@@ -282,7 +287,7 @@ macro_rules! create_function {
 					$(
 						ResolvedArgDecl {
 							name: stringify!($arg_name).into(),
-							typ: Type::$arg_type
+							typ: $arg_type
 						},
 					)*
 				] };
@@ -312,7 +317,22 @@ macro_rules! create_function {
 	};
 }
 
-create_function!(GetMessageContent: message_content(message_id: Number, channel_id: Number) -> String (args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, ctx: &Context, _shard_manager: &Arc<ShardManager>) {
+create_function!(GetArrayLength: array_len(arr: Type::Array(Box::new(Type::Any))) -> Number (args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, _ctx: &Context, _shard_manager: &Arc<ShardManager>) {
+	let arr = &force_downcast!(&args[0], Array).elements;
+
+	return Ok(Some(ResolvedExpr::Number(LiteralNumber { number: arr.len() as f64 })));
+});
+
+create_function!(GetRandNumber: random_number(lower: Type::Number, higher: Type::Number) -> Number (args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, _ctx: &Context, _shard_manager: &Arc<ShardManager>) {
+	let lower = &force_downcast!(&args[0], Number).number;
+	let higher = &force_downcast!(&args[1], Number).number;
+
+	let number = fastrand::i64(*lower as i64..*higher as i64);
+
+	return Ok(Some(ResolvedExpr::Number(LiteralNumber { number: number as f64 })));
+});
+
+create_function!(GetMessageContent: message_content(message_id: Type::Number, channel_id: Type::Number) -> String (args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, ctx: &Context, _shard_manager: &Arc<ShardManager>) {
 	let message_id = &force_downcast!(&args[0], Number).number;
 	let channel_id = &force_downcast!(&args[1], Number).number;
 
@@ -324,7 +344,7 @@ create_function!(GetMessageContent: message_content(message_id: Number, channel_
 	return Ok(Some(ResolvedExpr::String(LiteralString { s: msg.content })));
 });
 
-create_function!(SendMessage: send_message(message: Void, channel_id: Number) -> String (args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, ctx: &Context, _shard_manager: &Arc<ShardManager>) {
+create_function!(SendMessage: send_message(message: Type::String, channel_id: Type::Number) -> String (args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, ctx: &Context, _shard_manager: &Arc<ShardManager>) {
 	let message = &force_downcast!(&args[0], String).s;
 	let channel_id = &force_downcast!(&args[1], Number).number;
 
@@ -335,7 +355,7 @@ create_function!(SendMessage: send_message(message: Void, channel_id: Number) ->
 	return Ok(None);
 });
 
-create_function!(Delay: delay(ms: Number) -> Void (args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, _ctx: &Context, _shard_manager: &Arc<ShardManager>) {
+create_function!(Delay: delay(ms: Type::Number) -> Void (args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, _ctx: &Context, _shard_manager: &Arc<ShardManager>) {
 	if let ResolvedExpr::Number(LiteralNumber { number }) = args[0] {
 		tokio::time::sleep(std::time::Duration::from_millis(number as u64)).await;
 	}
@@ -343,7 +363,7 @@ create_function!(Delay: delay(ms: Number) -> Void (args: &[ResolvedExpr], _comma
 	return Ok(None);
 });
 
-create_function!(Respond: respond(message: String) -> Void (args: &[ResolvedExpr], command: &Option<&CommandInteraction>, ctx: &Context, _shard_manager: &Arc<ShardManager>) {
+create_function!(Respond: respond(message: Type::String) -> Void (args: &[ResolvedExpr], command: &Option<&CommandInteraction>, ctx: &Context, _shard_manager: &Arc<ShardManager>) {
 	if command.is_none() {
 		return Err(anyhow!("respond can only be used in a slash-command"));
 	}

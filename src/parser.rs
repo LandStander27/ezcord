@@ -37,15 +37,15 @@ fn parse_ident(input: &str) -> ParseResult<&str, String> {
 	return Ok((res.0, res.1.into()));
 }
 
-fn parse_number(input: &str) -> ParseResult<&str, i64> {
-	let res = recognize(preceded(opt(char('-')), many1(terminated(one_of("0123456789"), many0(char('_')))))).parse(input)?;
+fn parse_number(input: &str) -> ParseResult<&str, f64> {
+	let res = recognize(preceded(opt(char('-')), many1(terminated(one_of("0123456789."), many0(char('_')))))).parse(input)?;
 
-	let num: i64 = match res.1.parse() {
+	let num: f64 = match res.1.parse() {
 		Ok(o) => o,
 		Err(_) => {
 			let mut err = VerboseError::from_error_kind(res.1, nom::error::ErrorKind::Fail);
 			err.errors
-				.push((res.1, VerboseErrorKind::Context("invalid i64")));
+				.push((res.1, VerboseErrorKind::Context("expected <= 1 decimals in number")));
 			return Err(nom::Err::Error(err));
 		}
 	};
@@ -196,45 +196,12 @@ fn parse_expr_rhs(mut input: &str, mut lhs: Expr, prec: i64) -> ParseResult<&str
 // 	.parse(input);
 // }
 
-// fn parse_arg_decl(input: &str) -> ParseResult<&str, ArgDecl> {
-// 	let (input, ident) = delimited(multispace0, parse_ident, delimited(multispace0, char(':'), multispace0)).parse(input)?;
-// 	let (input, typ) = terminated(parse_type, multispace0).parse(input)?;
-// 	return Ok((input, ArgDecl { ident, typ }));
-// }
-
-// fn parse_fn_decl(input: &str) -> ParseResult<&str, FnDecl> {
-// 	let (input, _) = terminated(tag("fn"), multispace1).parse(input)?;
-// 	let (input, ident) = cut(context("invalid function identifier", terminated(parse_ident, multispace0))).parse(input)?;
-// 	let (input, args) = delimited(
-// 		cut(context("expected (", char('('))),
-// 		cut(separated_list0(char(','), parse_arg_decl)),
-// 		cut(context("expected ')'", char(')'))),
-// 	)
-// 	.parse(input)?;
-
-// 	let (input, _) = delimited(multispace0, tag("->"), multispace0).parse(input)?;
-// 	let (input, ret_type) = terminated(parse_type, multispace0).parse(input)?;
-
-// 	let (input, body) = cut(context(
-// 		"invalid block",
-// 		delimited(
-// 			delimited(multispace0, char('{'), multispace0),
-// 			context("invalid statement", parse_multi_stmt),
-// 			delimited(multispace0, char('}'), multispace0),
-// 		),
-// 	))
-// 	.parse(input)?;
-
-// 	return Ok((input, FnDecl { ident, ret_type, args, body }));
-// }
-
 fn parse_decl(input: &str) -> ParseResult<&str, Decl> {
 	return delimited(multispace0, alt((map(parse_var_decl, Decl::Var),)), multispace0).parse(input);
 }
 
 fn func(input: &str) -> ParseResult<&str, Call> {
-	let res = recognize(pair(alt((alpha1, tag("_"))), many0(alt((alphanumeric1, tag("_")))))).parse(input)?;
-
+	let res = terminated(parse_ident, multispace0).parse(input)?;
 	let ident = res.1;
 	let res = delimited(
 		context("expected (", char('(')),
@@ -243,7 +210,7 @@ fn func(input: &str) -> ParseResult<&str, Call> {
 	)
 	.parse(res.0)?;
 
-	return Ok((res.0, Call { name: ident.into(), args: res.1 }));
+	return Ok((res.0, Call { name: ident, args: res.1 }));
 }
 
 fn parse_var_set(input: &str) -> ParseResult<&str, VarSetStmt> {

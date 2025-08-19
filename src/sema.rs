@@ -69,12 +69,12 @@ impl<'a> Sema<'a> {
 						return Err(anyhow!("cannot index into non-Array, got '{}'", left.get_type()));
 					}
 
-					if right.get_type() != Type::Number {
+					if !right.get_type().is_same(&Type::Number) {
 						return Err(anyhow!("expected index to be '{}', got '{}'", Type::Number, right.get_type()));
 					}
 				}
 				_ => {
-					if left.get_type() != right.get_type() {
+					if !left.get_type().is_same(&right.get_type()) {
 						return Err(anyhow!("cannot do operation on '{}' and '{}'", left.get_type(), right.get_type()));
 					}
 				}
@@ -100,7 +100,7 @@ impl<'a> Sema<'a> {
 			_ => unreachable!(),
 		};
 
-		if expr.get_type() != needed_type {
+		if !expr.get_type().is_same(&needed_type) {
 			return Err(anyhow!("cannot do operation on '{}', expected '{}'", expr.get_type(), needed_type));
 		}
 
@@ -120,7 +120,7 @@ impl<'a> Sema<'a> {
 
 		for (i, arg) in call.args.into_iter().enumerate() {
 			let resolved = self.resolve_expr(arg)?;
-			if resolved.get_type() != func.args()[i].typ {
+			if !resolved.get_type().is_same(&func.args()[i].typ) {
 				return Err(anyhow!("invalid argument type; function signature: {}; got: {}", func.signature(), resolved.get_type()));
 			}
 			args.push(resolved);
@@ -169,11 +169,11 @@ impl<'a> Sema<'a> {
 			}),
 			Expr::Array(array) => {
 				let mut elements = Vec::new();
-				let mut element_type = None;
+				let mut element_type: Option<Type> = None;
 				for i in array.elements {
 					let element = self.resolve_expr(i)?;
 					if let Some(ref element_type) = element_type {
-						if element_type != &element.get_type() {
+						if !element_type.is_same(&element.get_type()) {
 							return Err(anyhow!(
 								"all elements of array must be of same type; expected '{}', got '{}'",
 								element_type,
@@ -256,7 +256,7 @@ impl<'a> Sema<'a> {
 					let selected_var = get_decl!(self, var.ident, Var);
 					if let Some(selected_var) = selected_var {
 						let expr = self.resolve_expr(var.expr)?;
-						if expr.get_type() != selected_var.typ {
+						if !expr.get_type().is_same(&selected_var.typ) {
 							return Err(anyhow!("variable assignment type mismatch"));
 						}
 						resolved_stmts.push(ResolvedStmt::VarSet(ResolvedVarSet { name: var.ident, expr }));
@@ -276,7 +276,7 @@ impl<'a> Sema<'a> {
 
 	fn resolve_if_stmt(&mut self, stmt: IfStmt) -> anyhow::Result<ResolvedIfStmt> {
 		let cond = self.resolve_expr(stmt.cond)?;
-		if cond.get_type() != Type::Bool {
+		if !cond.get_type().is_same(&Type::Bool) {
 			return Err(anyhow!("if condition must return a boolean; got: {}", cond.get_type()));
 		}
 
@@ -292,7 +292,7 @@ impl<'a> Sema<'a> {
 
 	fn resolve_while_stmt(&mut self, stmt: WhileStmt) -> anyhow::Result<ResolvedWhileStmt> {
 		let cond = self.resolve_expr(stmt.cond)?;
-		if cond.get_type() != Type::Bool {
+		if !cond.get_type().is_same(&Type::Bool) {
 			return Err(anyhow!("if condition must return a boolean; got: {}", cond.get_type()));
 		}
 

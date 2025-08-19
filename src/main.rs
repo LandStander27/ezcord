@@ -142,6 +142,8 @@ impl EventHandler for Handler {
 			Function::Time(Time::default()),
 			Function::SendMessage(SendMessage::default()),
 			Function::GetMessageContent(GetMessageContent::default()),
+			Function::GetRandNumber(GetRandNumber::default()),
+			Function::GetArrayLength(GetArrayLength::default()),
 		];
 		debug!("registering slash commands");
 		let mut commands = Vec::new();
@@ -310,12 +312,12 @@ impl EventHandler for Handler {
 			vec![
 				RuntimeVar {
 					name: "message".into(),
-					value: ResolvedExpr::Number(LiteralNumber { number: msg.id.get() as i64 }),
+					value: ResolvedExpr::Number(LiteralNumber { number: msg.id.get() as f64 }),
 				},
 				RuntimeVar {
 					name: "channel".into(),
 					value: ResolvedExpr::Number(LiteralNumber {
-						number: msg.channel_id.get() as i64,
+						number: msg.channel_id.get() as f64,
 					}),
 				},
 			],

@@ -43,7 +43,7 @@ pub enum BinOperation {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
 	String(LitOrFmtString),
-	Number(i64),
+	Number(f64),
 	Bool(bool),
 	Array(Array),
 	BinOp(BinOp),
@@ -51,12 +51,6 @@ pub enum Expr {
 	Group(Group),
 	Ident(String),
 	Call(Call),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Index {
-	pub array: Box<Expr>,
-	pub index: Box<Expr>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
