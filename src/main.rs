@@ -107,17 +107,17 @@ impl EventHandler for Handler {
 				.read()
 				.await;
 
-			if let Some(id) = commands[&command.data.name].restrict_to_user {
-				if command.user.id.get() != id {
-					error!("unauthorized user");
-					let data = CreateInteractionResponseMessage::new().content("unauthorized user");
-					let builder = CreateInteractionResponse::Message(data);
-					if let Err(why) = command.create_response(&ctx.http, builder).await {
-						error!(?why);
-					}
-
-					return;
+			if let Some(id) = commands[&command.data.name].restrict_to_user
+				&& command.user.id.get() != id
+			{
+				error!("unauthorized user");
+				let data = CreateInteractionResponseMessage::new().content("unauthorized user");
+				let builder = CreateInteractionResponse::Message(data);
+				if let Err(why) = command.create_response(&ctx.http, builder).await {
+					error!(?why);
 				}
+
+				return;
 			}
 
 			let mut runner = RunnerContext::new(resolved_vars, &funcs, Some(&command), &ctx, shard_manager.clone());
@@ -339,16 +339,16 @@ impl EventHandler for Handler {
 			.iter()
 			.filter(|x| x.event == ConfigEvent::MessageEdit || x.event == ConfigEvent::MessageEditOrCreate)
 		{
-			if let Some(ref id) = event.restrict_to_channel {
-				if *id != msg.channel_id.get() {
-					continue;
-				}
+			if let Some(ref id) = event.restrict_to_channel
+				&& *id != msg.channel_id.get()
+			{
+				continue;
 			}
 
-			if let Some(ref filter) = event.filter {
-				if !filter.is_match(msg.content.as_ref().unwrap()) {
-					continue;
-				}
+			if let Some(ref filter) = event.filter
+				&& !filter.is_match(msg.content.as_ref().unwrap())
+			{
+				continue;
 			}
 
 			let mut runner = RunnerContext::new(
@@ -397,16 +397,16 @@ impl EventHandler for Handler {
 			.iter()
 			.filter(|x| x.event == ConfigEvent::MessageCreate || x.event == ConfigEvent::MessageEditOrCreate)
 		{
-			if let Some(ref id) = event.restrict_to_channel {
-				if *id != msg.channel_id.get() {
-					continue;
-				}
+			if let Some(ref id) = event.restrict_to_channel
+				&& *id != msg.channel_id.get()
+			{
+				continue;
 			}
 
-			if let Some(ref filter) = event.filter {
-				if !filter.is_match(&msg.content) {
-					continue;
-				}
+			if let Some(ref filter) = event.filter
+				&& !filter.is_match(&msg.content)
+			{
+				continue;
 			}
 
 			let mut runner = RunnerContext::new(

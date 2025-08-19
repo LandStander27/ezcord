@@ -31,13 +31,13 @@ enum Token {
 	Comment,
 }
 
-fn parse_ident(input: &str) -> ParseResult<&str, String> {
+fn parse_ident(input: &str) -> ParseResult<'_, &str, String> {
 	let res = recognize(pair(alt((alpha1, tag("_"))), many0(alt((alphanumeric1, tag("_")))))).parse(input)?;
 
 	return Ok((res.0, res.1.into()));
 }
 
-fn parse_number(input: &str) -> ParseResult<&str, f64> {
+fn parse_number(input: &str) -> ParseResult<'_, &str, f64> {
 	let res = recognize(preceded(opt(char('-')), many1(terminated(one_of("0123456789."), many0(char('_')))))).parse(input)?;
 
 	let num: f64 = match res.1.parse() {
@@ -53,11 +53,11 @@ fn parse_number(input: &str) -> ParseResult<&str, f64> {
 	return Ok((res.0, num));
 }
 
-fn parse_bool(input: &str) -> ParseResult<&str, bool> {
+fn parse_bool(input: &str) -> ParseResult<'_, &str, bool> {
 	return alt((value(false, tag("false")), value(true, tag("true")))).parse(input);
 }
 
-fn parse_group(input: &str) -> ParseResult<&str, Group> {
+fn parse_group(input: &str) -> ParseResult<'_, &str, Group> {
 	return delimited(
 		terminated(char('('), multispace0),
 		map(map(parse_expr, Box::new), Group::new),
@@ -66,7 +66,7 @@ fn parse_group(input: &str) -> ParseResult<&str, Group> {
 	.parse(input);
 }
 
-fn parse_array(input: &str) -> ParseResult<&str, Array> {
+fn parse_array(input: &str) -> ParseResult<'_, &str, Array> {
 	let res = delimited(
 		terminated(char('['), multispace0),
 		cut(context("invalid array", separated_list0(delimited(multispace0, char(','), multispace0), parse_expr))),
@@ -77,12 +77,12 @@ fn parse_array(input: &str) -> ParseResult<&str, Array> {
 	return Ok((res.0, Array { elements: res.1 }));
 }
 
-fn parse_expr(input: &str) -> ParseResult<&str, Expr> {
+fn parse_expr(input: &str) -> ParseResult<'_, &str, Expr> {
 	let left = parse_expr_single(input)?;
 	return parse_expr_rhs(left.0, left.1, 0);
 }
 
-fn parse_postfix(input: &str) -> ParseResult<&str, Expr> {
+fn parse_postfix(input: &str) -> ParseResult<'_, &str, Expr> {
 	return delimited(
 		multispace0,
 		alt((
@@ -99,7 +99,7 @@ fn parse_postfix(input: &str) -> ParseResult<&str, Expr> {
 	.parse(input);
 }
 
-fn parse_expr_single(input: &str) -> ParseResult<&str, Expr> {
+fn parse_expr_single(input: &str) -> ParseResult<'_, &str, Expr> {
 	if let Ok((input, unary)) = parse_unary_op(input) {
 		let (rest, expr) = parse_postfix(input)?;
 		return Ok((rest, Expr::UnaryOp(UnaryOp { expr: Box::new(expr), op: unary })));
@@ -108,7 +108,7 @@ fn parse_expr_single(input: &str) -> ParseResult<&str, Expr> {
 	return parse_postfix(input);
 }
 
-fn parse_unary_op(input: &str) -> ParseResult<&str, Operation> {
+fn parse_unary_op(input: &str) -> ParseResult<'_, &str, Operation> {
 	return context(
 		"invalid unary op",
 		delimited(
@@ -120,7 +120,7 @@ fn parse_unary_op(input: &str) -> ParseResult<&str, Operation> {
 	.parse(input);
 }
 
-fn parse_binary_op(input: &str) -> ParseResult<&str, Operation> {
+fn parse_binary_op(input: &str) -> ParseResult<'_, &str, Operation> {
 	return context(
 		"invalid binop",
 		delimited(
@@ -143,7 +143,7 @@ fn parse_binary_op(input: &str) -> ParseResult<&str, Operation> {
 	.parse(input);
 }
 
-fn parse_expr_rhs(mut input: &str, mut lhs: Expr, prec: i64) -> ParseResult<&str, Expr> {
+fn parse_expr_rhs(mut input: &str, mut lhs: Expr, prec: i64) -> ParseResult<'_, &str, Expr> {
 	loop {
 		let (rest, op) = match parse_binary_op(input) {
 			Ok(o) => o,
@@ -196,11 +196,11 @@ fn parse_expr_rhs(mut input: &str, mut lhs: Expr, prec: i64) -> ParseResult<&str
 // 	.parse(input);
 // }
 
-fn parse_decl(input: &str) -> ParseResult<&str, Decl> {
+fn parse_decl(input: &str) -> ParseResult<'_, &str, Decl> {
 	return delimited(multispace0, alt((map(parse_var_decl, Decl::Var),)), multispace0).parse(input);
 }
 
-fn func(input: &str) -> ParseResult<&str, Call> {
+fn func(input: &str) -> ParseResult<'_, &str, Call> {
 	let res = terminated(parse_ident, multispace0).parse(input)?;
 	let ident = res.1;
 	let res = delimited(
@@ -213,7 +213,7 @@ fn func(input: &str) -> ParseResult<&str, Call> {
 	return Ok((res.0, Call { name: ident, args: res.1 }));
 }
 
-fn parse_var_set(input: &str) -> ParseResult<&str, VarSetStmt> {
+fn parse_var_set(input: &str) -> ParseResult<'_, &str, VarSetStmt> {
 	let res = parse_ident(input)?;
 
 	let ident = res.1;
@@ -226,7 +226,7 @@ fn parse_var_set(input: &str) -> ParseResult<&str, VarSetStmt> {
 	return Ok((res.0, VarSetStmt { ident, expr }));
 }
 
-fn parse_var_decl(input: &str) -> ParseResult<&str, VarDecl> {
+fn parse_var_decl(input: &str) -> ParseResult<'_, &str, VarDecl> {
 	let res = parse_ident(input)?;
 
 	let ident = res.1;
@@ -239,7 +239,7 @@ fn parse_var_decl(input: &str) -> ParseResult<&str, VarDecl> {
 	return Ok((res.0, VarDecl { ident, init }));
 }
 
-fn parse_if_stmt(input: &str) -> ParseResult<&str, IfStmt> {
+fn parse_if_stmt(input: &str) -> ParseResult<'_, &str, IfStmt> {
 	let input = terminated(tag("if"), multispace1).parse(input)?.0;
 
 	let res = cut(context("invalid condition", parse_expr)).parse(input)?;
@@ -274,7 +274,7 @@ fn parse_if_stmt(input: &str) -> ParseResult<&str, IfStmt> {
 	return Ok((res.0, IfStmt { cond, block, else_block }));
 }
 
-fn parse_while_stmt(input: &str) -> ParseResult<&str, WhileStmt> {
+fn parse_while_stmt(input: &str) -> ParseResult<'_, &str, WhileStmt> {
 	let input = terminated(tag("while"), multispace1).parse(input)?.0;
 
 	let res = cut(context("invalid condition", parse_expr)).parse(input)?;
@@ -292,14 +292,14 @@ fn parse_while_stmt(input: &str) -> ParseResult<&str, WhileStmt> {
 	return Ok((res.0, WhileStmt { cond, block: res.1 }));
 }
 
-fn parse_comment(input: &str) -> ParseResult<&str, ()> {
+fn parse_comment(input: &str) -> ParseResult<'_, &str, ()> {
 	let rest = preceded(char('#'), take_till(|x| x == '\n'))
 		.parse(input)?
 		.0;
 	return Ok((rest, ()));
 }
 
-fn parse_stmt(input: &str) -> ParseResult<&str, Token> {
+fn parse_stmt(input: &str) -> ParseResult<'_, &str, Token> {
 	return delimited(
 		multispace0,
 		alt((
@@ -316,7 +316,7 @@ fn parse_stmt(input: &str) -> ParseResult<&str, Token> {
 	.parse(input);
 }
 
-fn parse_multi_stmt(input: &str) -> ParseResult<&str, Vec<Stmt>> {
+fn parse_multi_stmt(input: &str) -> ParseResult<'_, &str, Vec<Stmt>> {
 	let mut rest: &str = input;
 	let mut actions: Vec<Stmt> = Vec::new();
 

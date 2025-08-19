@@ -19,7 +19,7 @@ enum StringFragment<'a> {
 	EscapedWS,
 }
 
-fn parse_unicode(input: &str) -> ParseResult<&str, char> {
+fn parse_unicode(input: &str) -> ParseResult<'_, &str, char> {
 	let parse_hex = take_while_m_n(1, 6, |c: char| c.is_ascii_hexdigit());
 	let parse_delimited_hex = preceded(char('u'), delimited(char('{'), parse_hex, char('}')));
 
@@ -27,7 +27,7 @@ fn parse_unicode(input: &str) -> ParseResult<&str, char> {
 	return map_opt(parse_u32, std::char::from_u32).parse(input);
 }
 
-fn parse_escaped_char(input: &str) -> ParseResult<&str, char> {
+fn parse_escaped_char(input: &str) -> ParseResult<'_, &str, char> {
 	return preceded(
 		char('\\'),
 		alt((
@@ -43,20 +43,20 @@ fn parse_escaped_char(input: &str) -> ParseResult<&str, char> {
 	.parse(input);
 }
 
-fn parse_escaped_whitespace(input: &str) -> ParseResult<&str, &str> {
+fn parse_escaped_whitespace(input: &str) -> ParseResult<'_, &str, &str> {
 	return preceded(char('\\'), cut(context("invalid escaped char", multispace1))).parse(input);
 }
 
-fn parse_fmt(input: &str) -> ParseResult<&str, Expr> {
+fn parse_fmt(input: &str) -> ParseResult<'_, &str, Expr> {
 	return delimited(char('{'), super::parse_expr, char('}')).parse(input);
 }
 
-fn parse_literal(input: &str) -> ParseResult<&str, &str> {
+fn parse_literal(input: &str) -> ParseResult<'_, &str, &str> {
 	let not_quote_slash = is_not("\"\\{");
 	return verify(not_quote_slash, |s: &str| !s.is_empty()).parse(input);
 }
 
-fn parse_fragment(input: &str) -> ParseResult<&str, StringFragment> {
+fn parse_fragment(input: &str) -> ParseResult<'_, &str, StringFragment<'_>> {
 	return alt((
 		map(parse_literal, StringFragment::Literal),
 		map(parse_escaped_char, StringFragment::EscapedChar),
@@ -66,7 +66,7 @@ fn parse_fragment(input: &str) -> ParseResult<&str, StringFragment> {
 	.parse(input);
 }
 
-pub fn parse_string(input: &str) -> ParseResult<&str, LitOrFmtString> {
+pub fn parse_string(input: &str) -> ParseResult<'_, &str, LitOrFmtString> {
 	let build = fold(0.., parse_fragment, Vec::new, |mut s, frag| {
 		s.push(frag);
 		// match frag {
