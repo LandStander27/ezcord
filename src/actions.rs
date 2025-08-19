@@ -90,15 +90,13 @@ impl<'a> RunnerContext<'a> {
 
 					BinOperation::Index => {
 						let arr = force_downcast!(left, Array);
-						let mut index = force_downcast!(right, Number).number;
-						if index < 0.0 {
-							index += arr.elements.len() as f64;
+						let mut index = force_downcast!(right, Number).number.floor() as i64;
+						if index < 0 {
+							index += arr.elements.len() as i64;
 						}
 
-						if arr.elements.len() as f64 >= index || index < 0.0 {
-							return Err(anyhow!("index out of bounds"));
-						} else if index.floor() != index {
-							return Err(anyhow!("index must be a positive integer"));
+						if index >= arr.elements.len() as i64 || index < 0 {
+							return Err(anyhow!("index out of bounds; index = {}; len = {}", index as usize, arr.elements.len()));
 						}
 
 						arr.elements[index as usize].clone()
@@ -255,7 +253,9 @@ pub enum Function {
 	SendMessage(SendMessage),
 	GetMessageContent(GetMessageContent),
 	GetRandNumber(GetRandNumber),
+	GetRandDecimal(GetRandDecimal),
 	GetArrayLength(GetArrayLength),
+	PrintDebug(PrintDebug),
 }
 
 impl Function {
@@ -317,10 +317,26 @@ macro_rules! create_function {
 	};
 }
 
+create_function!(PrintDebug: print_debug(string: Type::String) -> Void (args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, _ctx: &Context, _shard_manager: &Arc<ShardManager>) {
+	let s = &force_downcast!(&args[0], String).s;
+	tracing::debug!("{s}");
+
+	return Ok(None);
+});
+
 create_function!(GetArrayLength: array_len(arr: Type::Array(Box::new(Type::Any))) -> Number (args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, _ctx: &Context, _shard_manager: &Arc<ShardManager>) {
 	let arr = &force_downcast!(&args[0], Array).elements;
 
 	return Ok(Some(ResolvedExpr::Number(LiteralNumber { number: arr.len() as f64 })));
+});
+
+create_function!(GetRandDecimal: random_decimal(lower: Type::Number, higher: Type::Number) -> Number (args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, _ctx: &Context, _shard_manager: &Arc<ShardManager>) {
+	let lower = &force_downcast!(&args[0], Number).number;
+	let higher = &force_downcast!(&args[1], Number).number;
+
+	let number = lower + fastrand::f64() * (higher - lower);
+
+	return Ok(Some(ResolvedExpr::Number(LiteralNumber { number })));
 });
 
 create_function!(GetRandNumber: random_number(lower: Type::Number, higher: Type::Number) -> Number (args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, _ctx: &Context, _shard_manager: &Arc<ShardManager>) {
@@ -332,23 +348,23 @@ create_function!(GetRandNumber: random_number(lower: Type::Number, higher: Type:
 	return Ok(Some(ResolvedExpr::Number(LiteralNumber { number: number as f64 })));
 });
 
-create_function!(GetMessageContent: message_content(message_id: Type::Number, channel_id: Type::Number) -> String (args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, ctx: &Context, _shard_manager: &Arc<ShardManager>) {
-	let message_id = &force_downcast!(&args[0], Number).number;
-	let channel_id = &force_downcast!(&args[1], Number).number;
+create_function!(GetMessageContent: message_content(message_id: Type::String, channel_id: Type::String) -> String (args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, ctx: &Context, _shard_manager: &Arc<ShardManager>) {
+	let message_id = &force_downcast!(&args[0], String).s;
+	let channel_id = &force_downcast!(&args[1], String).s;
 
 	let msg = ctx
 		.http
-		.get_message(ChannelId::new(*channel_id as u64), MessageId::new(*message_id as u64))
+		.get_message(ChannelId::new(channel_id.parse()?), MessageId::new(message_id.parse()?))
 		.await?;
 
 	return Ok(Some(ResolvedExpr::String(LiteralString { s: msg.content })));
 });
 
-create_function!(SendMessage: send_message(message: Type::String, channel_id: Type::Number) -> String (args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, ctx: &Context, _shard_manager: &Arc<ShardManager>) {
+create_function!(SendMessage: send_message(message: Type::String, channel_id: Type::String) -> String (args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, ctx: &Context, _shard_manager: &Arc<ShardManager>) {
 	let message = &force_downcast!(&args[0], String).s;
-	let channel_id = &force_downcast!(&args[1], Number).number;
+	let channel_id = &force_downcast!(&args[1], String).s;
 
-	let id = ChannelId::new(*channel_id as u64);
+	let id = ChannelId::new(channel_id.parse()?);
 	let new_message = CreateMessage::new().content(message);
 	id.send_message(&ctx.http, new_message).await?;
 

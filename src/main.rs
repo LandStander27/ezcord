@@ -5,7 +5,7 @@ use anyhow::Result;
 use clap::Parser;
 use regex::Regex;
 use sema::decl::ResolvedVarDecl;
-use sema::expr::{LiteralNumber, LiteralString, ResolvedExpr};
+use sema::expr::{LiteralString, ResolvedExpr};
 use sema::stmt::ResolvedStmt;
 use sema::types::Type;
 use tokio::signal::unix::{SignalKind, signal};
@@ -48,6 +48,7 @@ macro_rules! one_or_other {
 pub struct ResolvedCommand {
 	statements: Vec<ResolvedStmt>,
 	log: bool,
+	restrict_to_user: Option<u64>,
 }
 
 pub struct ResolvedEvent {
@@ -105,6 +106,19 @@ impl EventHandler for Handler {
 				.read()
 				.await;
 
+			if let Some(id) = commands[&command.data.name].restrict_to_user {
+				if command.user.id.get() != id {
+					error!("unauthorized user");
+					let data = CreateInteractionResponseMessage::new().content("unauthorized user");
+					let builder = CreateInteractionResponse::Message(data);
+					if let Err(why) = command.create_response(&ctx.http, builder).await {
+						error!(?why);
+					}
+
+					return;
+				}
+			}
+
 			let mut runner = RunnerContext::new(resolved_vars, &funcs, Some(&command), &ctx, shard_manager.clone());
 
 			let mut start = None;
@@ -143,7 +157,9 @@ impl EventHandler for Handler {
 			Function::SendMessage(SendMessage::default()),
 			Function::GetMessageContent(GetMessageContent::default()),
 			Function::GetRandNumber(GetRandNumber::default()),
+			Function::GetRandDecimal(GetRandDecimal::default()),
 			Function::GetArrayLength(GetArrayLength::default()),
+			Function::PrintDebug(PrintDebug::default()),
 		];
 		debug!("registering slash commands");
 		let mut commands = Vec::new();
@@ -208,6 +224,7 @@ impl EventHandler for Handler {
 					ResolvedCommand {
 						statements: resolved,
 						log: cmd.log.unwrap_or_default(),
+						restrict_to_user: cmd.restrict_to_user,
 					},
 				);
 
@@ -254,12 +271,12 @@ impl EventHandler for Handler {
 					vec![
 						ResolvedVarDecl {
 							name: "message".into(),
-							typ: Type::Number,
+							typ: Type::String,
 							init: None,
 						},
 						ResolvedVarDecl {
 							name: "channel".into(),
-							typ: Type::Number,
+							typ: Type::String,
 							init: None,
 						},
 					],
@@ -294,6 +311,62 @@ impl EventHandler for Handler {
 		guild.set_commands(&ctx.http, commands).await.unwrap();
 	}
 
+	async fn message_update(&self, ctx: Context, _old_msg: Option<Message>, _new: Option<Message>, msg: MessageUpdateEvent) {
+		if msg.author.is_none() || msg.content.is_none() {
+			return;
+		}
+
+		if msg.author.unwrap().id == ctx.cache.current_user().id {
+			return;
+		}
+
+		let global_data = ctx.data.read().await;
+		let events = global_data.get::<EventsContainer>().unwrap().read().await;
+		let shard_manager = global_data.get::<ShardManagerContainer>().unwrap();
+		let funcs = global_data
+			.get::<BuiltinFuncsContainer>()
+			.unwrap()
+			.read()
+			.await;
+
+		for event in events
+			.iter()
+			.filter(|x| x.event == ConfigEvent::MessageEdit || x.event == ConfigEvent::MessageEditOrCreate)
+		{
+			if let Some(ref filter) = event.filter {
+				if !filter.is_match(msg.content.as_ref().unwrap()) {
+					continue;
+				}
+			}
+
+			let mut runner = RunnerContext::new(
+				vec![
+					RuntimeVar {
+						name: "message".into(),
+						value: ResolvedExpr::String(LiteralString { s: msg.id.get().to_string() }),
+					},
+					RuntimeVar {
+						name: "channel".into(),
+						value: ResolvedExpr::String(LiteralString {
+							s: msg.channel_id.get().to_string(),
+						}),
+					},
+				],
+				&funcs,
+				None,
+				&ctx,
+				shard_manager.clone(),
+			);
+
+			for stmt in event.statements.iter() {
+				if let Err(e) = runner.execute_stmt(stmt).await {
+					error!("{e}");
+					break;
+				}
+			}
+		}
+	}
+
 	async fn message(&self, ctx: Context, msg: Message) {
 		if msg.author.id == ctx.cache.current_user().id {
 			return;
@@ -308,30 +381,34 @@ impl EventHandler for Handler {
 			.read()
 			.await;
 
-		let mut runner = RunnerContext::new(
-			vec![
-				RuntimeVar {
-					name: "message".into(),
-					value: ResolvedExpr::Number(LiteralNumber { number: msg.id.get() as f64 }),
-				},
-				RuntimeVar {
-					name: "channel".into(),
-					value: ResolvedExpr::Number(LiteralNumber {
-						number: msg.channel_id.get() as f64,
-					}),
-				},
-			],
-			&funcs,
-			None,
-			&ctx,
-			shard_manager.clone(),
-		);
-		for event in events.iter().filter(|x| x.event == ConfigEvent::Message) {
+		for event in events
+			.iter()
+			.filter(|x| x.event == ConfigEvent::MessageCreate || x.event == ConfigEvent::MessageEditOrCreate)
+		{
 			if let Some(ref filter) = event.filter {
 				if !filter.is_match(&msg.content) {
 					continue;
 				}
 			}
+
+			let mut runner = RunnerContext::new(
+				vec![
+					RuntimeVar {
+						name: "message".into(),
+						value: ResolvedExpr::String(LiteralString { s: msg.id.get().to_string() }),
+					},
+					RuntimeVar {
+						name: "channel".into(),
+						value: ResolvedExpr::String(LiteralString {
+							s: msg.channel_id.get().to_string(),
+						}),
+					},
+				],
+				&funcs,
+				None,
+				&ctx,
+				shard_manager.clone(),
+			);
 
 			for stmt in event.statements.iter() {
 				if let Err(e) = runner.execute_stmt(stmt).await {

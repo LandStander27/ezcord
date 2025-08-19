@@ -13,9 +13,12 @@ impl From<ArgType> for CommandOptionType {
 	}
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
 pub enum Event {
-	Message,
+	MessageCreate,
+	MessageEdit,
+	MessageEditOrCreate,
 }
 
 #[derive(Deserialize, Debug)]
@@ -33,6 +36,7 @@ pub struct Command {
 	pub name: String,
 	pub action: String,
 	pub desc: String,
+	pub restrict_to_user: Option<u64>,
 	pub args: Option<Vec<Argument>>,
 	pub log: Option<bool>,
 }
