@@ -55,6 +55,7 @@ pub struct ResolvedEvent {
 	statements: Vec<ResolvedStmt>,
 	event: ConfigEvent,
 	filter: Option<Regex>,
+	restrict_to_channel: Option<u64>,
 }
 
 pub struct ShardManagerContainer;
@@ -155,6 +156,7 @@ impl EventHandler for Handler {
 			Function::Exit(Exit::default()),
 			Function::Time(Time::default()),
 			Function::SendMessage(SendMessage::default()),
+			Function::ReplyToMessage(ReplyToMessage::default()),
 			Function::GetMessageContent(GetMessageContent::default()),
 			Function::GetRandNumber(GetRandNumber::default()),
 			Function::GetRandDecimal(GetRandDecimal::default()),
@@ -300,15 +302,19 @@ impl EventHandler for Handler {
 					statements: resolved,
 					event: event.event,
 					filter: regex,
+					restrict_to_channel: event.restrict_to_channel,
 				});
 			}
 			debug!("created all events");
 
 			let mut builtin = data.get::<BuiltinFuncsContainer>().unwrap().write().await;
 			builtin.append(&mut builtin_functions);
+
+			let guild = GuildId::new(config.guild);
+			guild.set_commands(&ctx.http, commands).await.unwrap();
 		}
-		let guild = GuildId::new(1065054413493911652);
-		guild.set_commands(&ctx.http, commands).await.unwrap();
+
+		info!("done setting up");
 	}
 
 	async fn message_update(&self, ctx: Context, _old_msg: Option<Message>, _new: Option<Message>, msg: MessageUpdateEvent) {
@@ -333,6 +339,12 @@ impl EventHandler for Handler {
 			.iter()
 			.filter(|x| x.event == ConfigEvent::MessageEdit || x.event == ConfigEvent::MessageEditOrCreate)
 		{
+			if let Some(ref id) = event.restrict_to_channel {
+				if *id != msg.channel_id.get() {
+					continue;
+				}
+			}
+
 			if let Some(ref filter) = event.filter {
 				if !filter.is_match(msg.content.as_ref().unwrap()) {
 					continue;
@@ -385,6 +397,12 @@ impl EventHandler for Handler {
 			.iter()
 			.filter(|x| x.event == ConfigEvent::MessageCreate || x.event == ConfigEvent::MessageEditOrCreate)
 		{
+			if let Some(ref id) = event.restrict_to_channel {
+				if *id != msg.channel_id.get() {
+					continue;
+				}
+			}
+
 			if let Some(ref filter) = event.filter {
 				if !filter.is_match(&msg.content) {
 					continue;

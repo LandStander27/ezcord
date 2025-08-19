@@ -251,6 +251,7 @@ pub enum Function {
 	Exit(Exit),
 	Time(Time),
 	SendMessage(SendMessage),
+	ReplyToMessage(ReplyToMessage),
 	GetMessageContent(GetMessageContent),
 	GetRandNumber(GetRandNumber),
 	GetRandDecimal(GetRandDecimal),
@@ -358,6 +359,23 @@ create_function!(GetMessageContent: message_content(message_id: Type::String, ch
 		.await?;
 
 	return Ok(Some(ResolvedExpr::String(LiteralString { s: msg.content })));
+});
+
+create_function!(ReplyToMessage: reply_to_message(message: Type::String, message_id: Type::String, channel_id: Type::String) -> Void (args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, ctx: &Context, _shard_manager: &Arc<ShardManager>) {
+	let message = &force_downcast!(&args[0], String).s;
+	let message_id = &force_downcast!(&args[1], String).s;
+	let channel_id = &force_downcast!(&args[2], String).s;
+
+	let channel_id = ChannelId::new(channel_id.parse()?);
+	let message_id = MessageId::new(message_id.parse()?);
+	let msg = ctx
+		.http
+		.get_message(channel_id, message_id)
+		.await?;
+
+	msg.reply(&ctx.http, message).await?;
+
+	return Ok(None);
 });
 
 create_function!(SendMessage: send_message(message: Type::String, channel_id: Type::String) -> String (args: &[ResolvedExpr], _command: &Option<&CommandInteraction>, ctx: &Context, _shard_manager: &Arc<ShardManager>) {

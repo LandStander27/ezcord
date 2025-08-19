@@ -47,6 +47,7 @@ pub struct OnEvent {
 	pub event: Event,
 	pub action: String,
 	pub filter: Option<String>,
+	pub restrict_to_channel: Option<u64>,
 	// pub desc: String,
 	// pub args: Option<Vec<Argument>>,
 	// pub log: Option<bool>,
@@ -55,6 +56,7 @@ pub struct OnEvent {
 #[derive(Deserialize, Debug)]
 pub struct Config {
 	pub token: String,
+	pub guild: u64,
 	pub command: Option<Vec<Command>>,
 	pub on_event: Option<Vec<OnEvent>>,
 }
