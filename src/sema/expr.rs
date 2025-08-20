@@ -135,7 +135,14 @@ impl ResolvedBinaryOp {
 	fn get_type(&self) -> Type {
 		return match self.op {
 			Operation::Binary(ref binary) => match binary {
-				BinOperation::Equals | BinOperation::NotEquals => Type::Bool,
+				BinOperation::Equals
+				| BinOperation::NotEquals
+				| BinOperation::And
+				| BinOperation::Or
+				| BinOperation::GreaterOrEqualThan
+				| BinOperation::GreaterThan
+				| BinOperation::LessOrEqualThan
+				| BinOperation::LessThan => Type::Bool,
 				BinOperation::Index => {
 					if let Type::Array(element_type) = self.left.get_type() {
 						return *element_type;

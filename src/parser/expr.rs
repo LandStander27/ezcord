@@ -12,7 +12,11 @@ impl Operation {
 				BinOperation::Div | BinOperation::Mul => 6,
 				BinOperation::Add | BinOperation::Sub => 5,
 
+				BinOperation::GreaterOrEqualThan | BinOperation::GreaterThan | BinOperation::LessOrEqualThan | BinOperation::LessThan => 4,
 				BinOperation::NotEquals | BinOperation::Equals => 3,
+
+				BinOperation::And => 2,
+				BinOperation::Or => 1,
 			},
 			Operation::Unary(unary) => match unary {
 				UnaryOperation::Not | UnaryOperation::Neg | UnaryOperation::UnwrapOption | UnaryOperation::OptionIsSome => 7,
@@ -41,6 +45,15 @@ pub enum BinOperation {
 	NotEquals,
 
 	Index,
+
+	And,
+	Or,
+
+	GreaterThan,
+	LessThan,
+
+	GreaterOrEqualThan,
+	LessOrEqualThan,
 }
 
 #[derive(Debug, Clone, PartialEq)]

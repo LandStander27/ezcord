@@ -111,6 +111,43 @@ impl<'a> RunnerContext<'a> {
 
 						arr.elements[index as usize].clone()
 					}
+
+					BinOperation::And => {
+						let left = force_downcast!(left, Bool).value;
+						let right = force_downcast!(right, Bool).value;
+
+						ResolvedExpr::Bool(LiteralBool { value: left && right })
+					}
+					BinOperation::Or => {
+						let left = force_downcast!(left, Bool).value;
+						let right = force_downcast!(right, Bool).value;
+
+						ResolvedExpr::Bool(LiteralBool { value: left || right })
+					}
+					BinOperation::GreaterOrEqualThan => {
+						let left = force_downcast!(left, Number).number;
+						let right = force_downcast!(right, Number).number;
+
+						ResolvedExpr::Bool(LiteralBool { value: left >= right })
+					}
+					BinOperation::GreaterThan => {
+						let left = force_downcast!(left, Number).number;
+						let right = force_downcast!(right, Number).number;
+
+						ResolvedExpr::Bool(LiteralBool { value: left > right })
+					}
+					BinOperation::LessOrEqualThan => {
+						let left = force_downcast!(left, Number).number;
+						let right = force_downcast!(right, Number).number;
+
+						ResolvedExpr::Bool(LiteralBool { value: left <= right })
+					}
+					BinOperation::LessThan => {
+						let left = force_downcast!(left, Number).number;
+						let right = force_downcast!(right, Number).number;
+
+						ResolvedExpr::Bool(LiteralBool { value: left < right })
+					}
 				}
 			}
 			Operation::Unary(_) => unreachable!(),

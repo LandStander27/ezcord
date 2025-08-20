@@ -62,24 +62,25 @@ impl<'a> Sema<'a> {
 		let left = self.resolve_expr(*binary.left)?;
 		let right = self.resolve_expr(*binary.right)?;
 
-		match binary.op {
+		let needed_types = match binary.op {
 			Operation::Binary(ref binary) => match binary {
-				BinOperation::Index => {
-					if !matches!(left.get_type(), Type::Array(_)) {
-						return Err(anyhow!("cannot index into non-Array, got '{}'", left.get_type()));
-					}
-
-					if !right.get_type().is_same(&Type::Number) {
-						return Err(anyhow!("expected index to be '{}', got '{}'", Type::Number, right.get_type()));
-					}
-				}
-				_ => {
-					if !left.get_type().is_same(&right.get_type()) {
-						return Err(anyhow!("cannot do operation on '{}' and '{}'", left.get_type(), right.get_type()));
-					}
-				}
+				BinOperation::Add | BinOperation::Sub | BinOperation::Div | BinOperation::Mul => (Type::Number, Type::Number),
+				BinOperation::Equals | BinOperation::NotEquals => (Type::Any, Type::Any),
+				BinOperation::Index => (Type::Array(Box::new(Type::Any)), Type::Number),
+				BinOperation::And | BinOperation::Or => (Type::Bool, Type::Bool),
+				BinOperation::GreaterOrEqualThan | BinOperation::GreaterThan | BinOperation::LessOrEqualThan | BinOperation::LessThan => (Type::Number, Type::Number),
 			},
 			_ => unreachable!(),
+		};
+
+		if !left.get_type().is_same(&needed_types.0) || !right.get_type().is_same(&needed_types.1) {
+			return Err(anyhow!(
+				"cannot do operation on '{}' and '{}', expected '{}' and '{}'",
+				left.get_type(),
+				right.get_type(),
+				needed_types.0,
+				needed_types.1
+			));
 		}
 
 		return Ok(ResolvedBinaryOp {
