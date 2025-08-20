@@ -113,7 +113,15 @@ fn parse_unary_op(input: &str) -> ParseResult<'_, &str, Operation> {
 		"invalid unary op",
 		delimited(
 			multispace0,
-			map(alt((value(UnaryOperation::Neg, char('-')), value(UnaryOperation::Not, char('!')))), Operation::Unary),
+			map(
+				alt((
+					value(UnaryOperation::Neg, char('-')),
+					value(UnaryOperation::Not, char('!')),
+					value(UnaryOperation::UnwrapOption, char('*')),
+					value(UnaryOperation::OptionIsSome, char('?')),
+				)),
+				Operation::Unary,
+			),
 			multispace0,
 		),
 	)

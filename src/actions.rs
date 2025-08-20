@@ -27,7 +27,7 @@ macro_rules! force_downcast {
 		if let ResolvedExpr::$pattern(inner) = $upper {
 			inner
 		} else {
-			panic!("from `force_downcast`");
+			return Err(anyhow!("invalid type; expected '{}'; got '{}'", stringify!($pattern), $upper.get_type()));
 		}
 	}};
 }
@@ -60,6 +60,16 @@ impl<'a> RunnerContext<'a> {
 					}),
 					UnaryOperation::Not => ResolvedExpr::Bool(LiteralBool {
 						value: !force_downcast!(expr, Bool).value,
+					}),
+					UnaryOperation::UnwrapOption => {
+						if let Some(value) = force_downcast!(expr, Option).value {
+							*value
+						} else {
+							return Err(anyhow!("value is none"));
+						}
+					}
+					UnaryOperation::OptionIsSome => ResolvedExpr::Bool(LiteralBool {
+						value: force_downcast!(expr, Option).value.is_some(),
 					}),
 				}
 			}

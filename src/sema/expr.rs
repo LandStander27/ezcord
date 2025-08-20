@@ -54,11 +54,24 @@ pub enum ResolvedExpr {
 	Number(LiteralNumber),
 	Bool(LiteralBool),
 	Array(ResolvedArray),
+	Option(ResolvedOption),
 	Ident(ResolvedVarExpr),
 	Group(ResolvedGroup),
 	UnaryOp(ResolvedUnaryOp),
 	BinaryOp(ResolvedBinaryOp),
 	Call(ResolvedCall),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedOption {
+	pub value: Option<Box<ResolvedExpr>>,
+	pub inner_type: Type,
+}
+
+impl ResolvedOption {
+	fn get_type(&self) -> Type {
+		return Type::Optional(Box::new(self.inner_type.clone()));
+	}
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -95,7 +108,19 @@ pub struct ResolvedUnaryOp {
 
 impl ResolvedUnaryOp {
 	fn get_type(&self) -> Type {
-		return self.expr.get_type();
+		return match self.op {
+			Operation::Unary(ref unary) => match unary {
+				UnaryOperation::UnwrapOption => {
+					if let Type::Optional(inner_type) = self.expr.get_type() {
+						return *inner_type;
+					}
+					unreachable!();
+				}
+				UnaryOperation::OptionIsSome => Type::Bool,
+				_ => self.expr.get_type(),
+			},
+			Operation::Binary(_) => unreachable!(),
+		};
 	}
 }
 

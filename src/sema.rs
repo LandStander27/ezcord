@@ -96,6 +96,7 @@ impl<'a> Sema<'a> {
 			Operation::Unary(ref unary) => match unary {
 				UnaryOperation::Neg => Type::Number,
 				UnaryOperation::Not => Type::Bool,
+				UnaryOperation::UnwrapOption | UnaryOperation::OptionIsSome => Type::Optional(Box::new(Type::Any)),
 			},
 			_ => unreachable!(),
 		};

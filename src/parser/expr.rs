@@ -15,7 +15,7 @@ impl Operation {
 				BinOperation::NotEquals | BinOperation::Equals => 3,
 			},
 			Operation::Unary(unary) => match unary {
-				UnaryOperation::Not | UnaryOperation::Neg => 7,
+				UnaryOperation::Not | UnaryOperation::Neg | UnaryOperation::UnwrapOption | UnaryOperation::OptionIsSome => 7,
 			},
 		}
 	}
@@ -25,6 +25,9 @@ impl Operation {
 pub enum UnaryOperation {
 	Not,
 	Neg,
+
+	UnwrapOption,
+	OptionIsSome,
 }
 
 #[derive(Debug, Clone, PartialEq)]

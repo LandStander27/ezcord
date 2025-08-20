@@ -6,6 +6,7 @@ pub enum Type {
 	Number,
 	Bool,
 	Array(Box<Type>),
+	Optional(Box<Type>),
 	Any,
 	Void,
 }
@@ -16,6 +17,12 @@ impl Type {
 			return true;
 		} else if let Type::Array(inner) = self {
 			if let Type::Array(other_inner) = other {
+				return inner.is_same(other_inner);
+			} else {
+				return false;
+			}
+		} else if let Type::Optional(inner) = self {
+			if let Type::Optional(other_inner) = other {
 				return inner.is_same(other_inner);
 			} else {
 				return false;
@@ -34,6 +41,7 @@ impl std::fmt::Display for Type {
 			Self::String => "String".into(),
 			Self::Bool => "Boolean".into(),
 			Self::Array(inner) => format!("Array[{inner}]"),
+			Self::Optional(inner) => format!("Option<{inner}>"),
 			Self::Any => "Any".into(),
 		});
 	}

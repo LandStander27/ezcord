@@ -27,6 +27,8 @@ use config::*;
 mod actions;
 use actions::*;
 
+use crate::sema::expr::ResolvedOption;
+
 mod parser;
 mod sema;
 
@@ -47,6 +49,7 @@ macro_rules! one_or_other {
 
 pub struct ResolvedCommand {
 	statements: Vec<ResolvedStmt>,
+	args: Vec<ResolvedVarDecl>,
 	log: bool,
 	restrict_to_user: Option<u64>,
 }
@@ -88,16 +91,6 @@ struct Handler;
 impl EventHandler for Handler {
 	async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
 		if let Interaction::Command(command) = interaction {
-			let mut resolved_vars = Vec::new();
-			for v in command.data.options() {
-				let value = match v.value {
-					ResolvedValue::String(s) => ResolvedExpr::String(LiteralString { s: s.to_string() }),
-					_ => unimplemented!(),
-				};
-
-				resolved_vars.push(RuntimeVar { name: v.name.to_string(), value });
-			}
-
 			let global_data = ctx.data.read().await;
 			let commands = global_data.get::<CommandsContainer>().unwrap().read().await;
 			let shard_manager = global_data.get::<ShardManagerContainer>().unwrap();
@@ -107,7 +100,37 @@ impl EventHandler for Handler {
 				.read()
 				.await;
 
-			if let Some(id) = commands[&command.data.name].restrict_to_user
+			let func = &commands[&command.data.name];
+			let mut args: Vec<&ResolvedVarDecl> = func.args.iter().collect();
+			let mut resolved_vars = Vec::new();
+			for v in command.data.options() {
+				let arg = args.iter().position(|x| x.name == v.name).unwrap();
+				let mut value = match v.value {
+					ResolvedValue::String(s) => ResolvedExpr::String(LiteralString { s: s.to_string() }),
+					_ => unimplemented!(),
+				};
+				if let Type::Optional(_) = args[arg].typ {
+					let t = value.get_type();
+					value = ResolvedExpr::Option(ResolvedOption {
+						value: Some(Box::new(value)),
+						inner_type: t,
+					});
+				}
+
+				args.swap_remove(arg);
+				resolved_vars.push(RuntimeVar { name: v.name.to_string(), value });
+			}
+			for arg in args {
+				resolved_vars.push(RuntimeVar {
+					name: arg.name.clone(),
+					value: ResolvedExpr::Option(ResolvedOption {
+						value: None,
+						inner_type: arg.typ.clone(),
+					}),
+				});
+			}
+
+			if let Some(id) = func.restrict_to_user
 				&& command.user.id.get() != id
 			{
 				error!("unauthorized user");
@@ -123,12 +146,12 @@ impl EventHandler for Handler {
 			let mut runner = RunnerContext::new(resolved_vars, &funcs, Some(&command), &ctx, shard_manager.clone());
 
 			let mut start = None;
-			if commands[&command.data.name].log {
+			if func.log {
 				info!("'{}' command running", command.data.name);
 				start = Some(std::time::Instant::now());
 			}
 
-			for stmt in &commands[&command.data.name].statements {
+			for stmt in &func.statements {
 				if let Err(e) = runner.execute_stmt(stmt).await {
 					error!("{e}");
 					let data = CreateInteractionResponseMessage::new().content(format!("Error in command: {e}"));
@@ -191,20 +214,24 @@ impl EventHandler for Handler {
 				};
 				trace!("parsing took {}ms", start.elapsed().as_millis());
 
-				let resolved_args = cmd
+				let resolved_args: Vec<ResolvedVarDecl> = cmd
 					.args
 					.as_ref()
 					.unwrap_or(&vec![])
 					.iter()
 					.map(|a| ResolvedVarDecl {
 						name: a.name.clone(),
-						typ: a.typ.clone(),
+						typ: if a.optional.unwrap_or_default() {
+							Type::Optional(Box::new(a.typ.clone()))
+						} else {
+							a.typ.clone()
+						},
 						init: None,
 					})
 					.collect();
 
 				let start = std::time::Instant::now();
-				let mut sema = sema::Sema::new(&builtin_functions, resolved_args);
+				let mut sema = sema::Sema::new(&builtin_functions, resolved_args.clone());
 				let resolved = match sema.resolve(actions) {
 					Ok(o) => o,
 					Err(e) => {
@@ -226,6 +253,7 @@ impl EventHandler for Handler {
 					ResolvedCommand {
 						statements: resolved,
 						log: cmd.log.unwrap_or_default(),
+						args: resolved_args,
 						restrict_to_user: cmd.restrict_to_user,
 					},
 				);
