@@ -149,6 +149,7 @@ impl ResolvedBinaryOp {
 					}
 					unreachable!()
 				}
+				BinOperation::Range | BinOperation::RangeInclusive => Type::Range,
 				_ => self.left.get_type(),
 			},
 			Operation::Unary(_) => unreachable!(),

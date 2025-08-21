@@ -7,6 +7,7 @@ pub enum ResolvedStmt {
 	Decl(ResolvedDecl),
 	If(ResolvedIfStmt),
 	While(ResolvedWhileStmt),
+	For(ResolvedForStmt),
 	VarSet(ResolvedVarSet),
 }
 
@@ -21,6 +22,13 @@ pub struct ResolvedIfStmt {
 	pub cond: ResolvedExpr,
 	pub block: Vec<ResolvedStmt>,
 	pub else_block: Option<Vec<ResolvedStmt>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedForStmt {
+	pub var_ident: String,
+	pub iterator: ResolvedExpr,
+	pub block: Vec<ResolvedStmt>,
 }
 
 #[derive(Debug, Clone)]

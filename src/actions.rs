@@ -148,6 +148,26 @@ impl<'a> RunnerContext<'a> {
 
 						ResolvedExpr::Bool(LiteralBool { value: left < right })
 					}
+					BinOperation::Range => {
+						let left = force_downcast!(left, Number).number;
+						let right = force_downcast!(right, Number).number;
+
+						ResolvedExpr::Array(ResolvedArray {
+							elements: (left.floor() as i64..right.floor() as i64)
+								.map(|x| ResolvedExpr::Number(LiteralNumber { number: x as f64 }))
+								.collect(),
+						})
+					}
+					BinOperation::RangeInclusive => {
+						let left = force_downcast!(left, Number).number;
+						let right = force_downcast!(right, Number).number;
+
+						ResolvedExpr::Array(ResolvedArray {
+							elements: (left.floor() as i64..=right.floor() as i64)
+								.map(|x| ResolvedExpr::Number(LiteralNumber { number: x as f64 }))
+								.collect(),
+						})
+					}
 				}
 			}
 			Operation::Unary(_) => unreachable!(),
@@ -265,6 +285,28 @@ impl<'a> RunnerContext<'a> {
 							return Ok(());
 						}
 					}
+				}
+			}
+			ResolvedStmt::For(for_stmt) => {
+				let iterator = self.execute_expr(&for_stmt.iterator).await?.unwrap();
+				let iterator = match iterator {
+					ResolvedExpr::Array(array) => array.elements,
+					ResolvedExpr::String(string) => string
+						.s
+						.chars()
+						.map(|x| ResolvedExpr::String(LiteralString { s: x.to_string() }))
+						.collect::<Vec<ResolvedExpr>>(),
+					_ => unreachable!(),
+				};
+				for value in iterator {
+					self.vars.push(vec![RuntimeVar {
+						name: for_stmt.var_ident.clone(),
+						value,
+					}]);
+					for stmt in &for_stmt.block {
+						Box::pin(self.execute_stmt(stmt)).await?;
+					}
+					self.vars.pop();
 				}
 			}
 		};

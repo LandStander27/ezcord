@@ -7,6 +7,7 @@ pub enum Type {
 	Bool,
 	Array(Box<Type>),
 	Optional(Box<Type>),
+	Range,
 	Any,
 	Void,
 }
@@ -40,6 +41,7 @@ impl std::fmt::Display for Type {
 			Self::Number => "Number".into(),
 			Self::String => "String".into(),
 			Self::Bool => "Boolean".into(),
+			Self::Range => "Range".into(),
 			Self::Array(inner) => format!("Array[{inner}]"),
 			Self::Optional(inner) => format!("Option<{inner}>"),
 			Self::Any => "Any".into(),

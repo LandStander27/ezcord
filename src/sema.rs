@@ -69,6 +69,7 @@ impl<'a> Sema<'a> {
 				BinOperation::Index => (Type::Array(Box::new(Type::Any)), Type::Number),
 				BinOperation::And | BinOperation::Or => (Type::Bool, Type::Bool),
 				BinOperation::GreaterOrEqualThan | BinOperation::GreaterThan | BinOperation::LessOrEqualThan | BinOperation::LessThan => (Type::Number, Type::Number),
+				BinOperation::Range | BinOperation::RangeInclusive => (Type::Number, Type::Number),
 			},
 			_ => unreachable!(),
 		};
@@ -254,6 +255,7 @@ impl<'a> Sema<'a> {
 				}
 				Stmt::If(if_stmt) => resolved_stmts.push(ResolvedStmt::If(self.resolve_if_stmt(if_stmt)?)),
 				Stmt::While(while_stmt) => resolved_stmts.push(ResolvedStmt::While(self.resolve_while_stmt(while_stmt)?)),
+				Stmt::For(for_stmt) => resolved_stmts.push(ResolvedStmt::For(self.resolve_for_stmt(for_stmt)?)),
 				Stmt::VarSet(var) => {
 					let selected_var = get_decl!(self, var.ident, Var);
 					if let Some(selected_var) = selected_var {
@@ -300,6 +302,33 @@ impl<'a> Sema<'a> {
 
 		let block = self.resolve_block(stmt.block)?;
 		return Ok(ResolvedWhileStmt { cond, block });
+	}
+
+	fn resolve_for_stmt(&mut self, stmt: ForStmt) -> anyhow::Result<ResolvedForStmt> {
+		let iterator = self.resolve_expr(stmt.iterator)?;
+		if !matches!(iterator.get_type(), Type::Array(_) | Type::Range | Type::String) {
+			return Err(anyhow!("can only iterate over an Array, Range, or a String"));
+		}
+
+		let iterator_type = match iterator.get_type() {
+			Type::String => Type::String,
+			Type::Array(inner) => *inner,
+			Type::Range => Type::Number,
+			_ => unreachable!(),
+		};
+		self.decls.push(vec![ResolvedDecl::Var(ResolvedVarDecl {
+			init: None,
+			name: stmt.var_ident.clone(),
+			typ: iterator_type,
+		})]);
+		let block = self.resolve_block(stmt.block)?;
+		self.decls.pop();
+
+		return Ok(ResolvedForStmt {
+			var_ident: stmt.var_ident,
+			iterator,
+			block,
+		});
 	}
 
 	pub fn resolve(&mut self, input: Vec<Stmt>) -> anyhow::Result<Vec<ResolvedStmt>> {

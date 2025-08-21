@@ -5,6 +5,7 @@ pub enum Stmt {
 	Expr(Expr),
 	Decl(Decl),
 	If(IfStmt),
+	For(ForStmt),
 	While(WhileStmt),
 	VarSet(VarSetStmt),
 }
@@ -13,6 +14,13 @@ pub enum Stmt {
 pub struct VarSetStmt {
 	pub ident: String,
 	pub expr: Expr,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ForStmt {
+	pub var_ident: String,
+	pub iterator: Expr,
+	pub block: Vec<Stmt>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -8,18 +8,19 @@ impl Operation {
 	pub fn prec(&self) -> i64 {
 		match self {
 			Operation::Binary(bin) => match bin {
-				BinOperation::Index => 8,
-				BinOperation::Div | BinOperation::Mul => 6,
-				BinOperation::Add | BinOperation::Sub => 5,
+				BinOperation::Index => 9,
+				BinOperation::Div | BinOperation::Mul => 7,
+				BinOperation::Add | BinOperation::Sub => 6,
 
-				BinOperation::GreaterOrEqualThan | BinOperation::GreaterThan | BinOperation::LessOrEqualThan | BinOperation::LessThan => 4,
-				BinOperation::NotEquals | BinOperation::Equals => 3,
+				BinOperation::GreaterOrEqualThan | BinOperation::GreaterThan | BinOperation::LessOrEqualThan | BinOperation::LessThan => 5,
+				BinOperation::NotEquals | BinOperation::Equals => 4,
 
-				BinOperation::And => 2,
-				BinOperation::Or => 1,
+				BinOperation::And => 3,
+				BinOperation::Or => 2,
+				BinOperation::Range | BinOperation::RangeInclusive => 1,
 			},
 			Operation::Unary(unary) => match unary {
-				UnaryOperation::Not | UnaryOperation::Neg | UnaryOperation::UnwrapOption | UnaryOperation::OptionIsSome => 7,
+				UnaryOperation::Not | UnaryOperation::Neg | UnaryOperation::UnwrapOption | UnaryOperation::OptionIsSome => 8,
 			},
 		}
 	}
@@ -54,6 +55,9 @@ pub enum BinOperation {
 
 	GreaterOrEqualThan,
 	LessOrEqualThan,
+
+	Range,
+	RangeInclusive,
 }
 
 #[derive(Debug, Clone, PartialEq)]

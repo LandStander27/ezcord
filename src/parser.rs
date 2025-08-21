@@ -39,7 +39,6 @@ fn parse_ident(input: &str) -> ParseResult<'_, &str, String> {
 
 fn parse_number(input: &str) -> ParseResult<'_, &str, f64> {
 	let res = recognize(preceded(opt(char('-')), many1(terminated(one_of("0123456789."), many0(char('_')))))).parse(input)?;
-
 	let num: f64 = match res.1.parse() {
 		Ok(o) => o,
 		Err(_) => {
@@ -147,6 +146,8 @@ fn parse_binary_op(input: &str) -> ParseResult<'_, &str, Operation> {
 					value(BinOperation::LessThan, char('<')),
 					value(BinOperation::GreaterOrEqualThan, tag(">=")),
 					value(BinOperation::LessOrEqualThan, tag("<=")),
+					value(BinOperation::Range, tag("..")),
+					value(BinOperation::RangeInclusive, tag("..=")),
 					value(BinOperation::Index, char('[')),
 				)),
 				Operation::Binary,
@@ -313,11 +314,30 @@ fn parse_comment(input: &str) -> ParseResult<'_, &str, ()> {
 	return Ok((rest, ()));
 }
 
+fn parse_for_stmt(input: &str) -> ParseResult<'_, &str, ForStmt> {
+	let (input, _) = terminated(tag("for"), multispace1).parse(input)?;
+	let (input, var_ident) = cut(context("expected identifier", parse_ident)).parse(input)?;
+	let (input, _) = cut(context("expected 'in'", delimited(multispace1, tag("in"), multispace1))).parse(input)?;
+	let (input, iterator) = cut(parse_expr).parse(input)?;
+	let (input, block) = cut(context(
+		"invalid block",
+		delimited(
+			delimited(multispace0, char('{'), multispace0),
+			context("invalid statement", parse_multi_stmt),
+			delimited(multispace0, char('}'), multispace0),
+		),
+	))
+	.parse(input)?;
+
+	return Ok((input, ForStmt { block, var_ident, iterator }));
+}
+
 fn parse_stmt(input: &str) -> ParseResult<'_, &str, Token> {
 	return delimited(
 		multispace0,
 		alt((
 			value(Token::Comment, parse_comment),
+			map(map(parse_for_stmt, Stmt::For), Token::Stmt),
 			map(map(parse_if_stmt, Stmt::If), Token::Stmt),
 			map(map(parse_while_stmt, Stmt::While), Token::Stmt),
 			map(map(parse_decl, Stmt::Decl), Token::Stmt),
