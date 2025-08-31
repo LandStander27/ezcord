@@ -50,7 +50,7 @@ pub struct OnEvent {
 	pub restrict_to_channel: Option<u64>,
 	// pub desc: String,
 	// pub args: Option<Vec<Argument>>,
-	// pub log: Option<bool>,
+	pub log: Option<bool>,
 }
 
 #[derive(Deserialize, Debug)]

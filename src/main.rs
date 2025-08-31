@@ -59,6 +59,7 @@ pub struct ResolvedEvent {
 	event: ConfigEvent,
 	filter: Option<Regex>,
 	restrict_to_channel: Option<u64>,
+	log: bool,
 }
 
 pub struct ShardManagerContainer;
@@ -331,6 +332,7 @@ impl EventHandler for Handler {
 					event: event.event,
 					filter: regex,
 					restrict_to_channel: event.restrict_to_channel,
+					log: event.log.unwrap_or_default(),
 				});
 			}
 			debug!("created all events");
@@ -398,11 +400,21 @@ impl EventHandler for Handler {
 				shard_manager.clone(),
 			);
 
+			let mut start = None;
+			if event.log {
+				info!("message update event running");
+				start = Some(std::time::Instant::now());
+			}
+
 			for stmt in event.statements.iter() {
 				if let Err(e) = runner.execute_stmt(stmt).await {
 					error!("{e}");
 					break;
 				}
+			}
+
+			if let Some(time) = start {
+				info!("message update event finished in {}ms", time.elapsed().as_millis());
 			}
 		}
 	}
@@ -456,11 +468,21 @@ impl EventHandler for Handler {
 				shard_manager.clone(),
 			);
 
+			let mut start = None;
+			if event.log {
+				info!("message create event running");
+				start = Some(std::time::Instant::now());
+			}
+
 			for stmt in event.statements.iter() {
 				if let Err(e) = runner.execute_stmt(stmt).await {
 					error!("{e}");
 					break;
 				}
+			}
+
+			if let Some(time) = start {
+				info!("message create event finished in {}ms", time.elapsed().as_millis());
 			}
 		}
 	}
